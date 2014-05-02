@@ -125,22 +125,22 @@ CURR_TO_BASE = TOWER_BASES[CURR_TO]
 
 ; TODO: Execute 6 steps to move disk and prep for next cycle
 ; Move to the pickup zone and align with next disk to pickup
-PTP CURR_FROM_BASE:PICK_UP_OFFSET
+LIN CURR_FROM_BASE:PICK_UP_OFFSET
 
 ;Move to tower center offset up by currdisk offset
-PTP CURR_FROM_BASE:FROM_DISK_Z_OFFSET
+LIN CURR_FROM_BASE:FROM_DISK_Z_OFFSET
 
 ; Move up to transit zone
-PTP CURR_FROM_BASE:TRANSIT_OFFSET
+LIN CURR_FROM_BASE:TRANSIT_OFFSET
 
 ; Align with to tower in transit zone
-PTP CURR_TO_BASE:TRANSIT_OFFSET
+LIN CURR_TO_BASE:TRANSIT_OFFSET
 
 ; Lower to tower base + disk offset
-PTP CURR_TO_BASE:TO_DISK_Z_OFFSET
+LIN CURR_TO_BASE:TO_DISK_Z_OFFSET
 
 ; Retract into pickup zone
-PTP CURR_TO_BASE:PICK_UP_OFFSET
+LIN CURR_TO_BASE:PICK_UP_OFFSET
 
 ; TODO: Change disk counts for from and to towers
 DISK_COUNTS[CURR_TO] = DISK_COUNTS[CURR_TO] + 1
