@@ -1,0 +1,79 @@
+&ACCESS  R
+&COMMENT USERSPOT package
+DEF  USERSPOT (CMD :IN,S :IN )
+  ;********************************
+  ; USERSPOT - Package KR C1
+  ; V3.2
+  ; Date: 23.03.98 
+  ; 
+  ;********************************
+  DECL S_COMMAND CMD
+  DECL SPOT_TYPE S
+
+  SWITCH  CMD
+
+  CASE #INIT
+    INIT ( )
+
+  CASE #ADVSPOT
+    ADVSPOT (CMD,S )
+
+  CASE #PRESPOT
+    PRESPOT (CMD,S )
+
+  CASE #SPOT
+    SPOT (CMD,S )
+    S_READY=TRUE
+
+  CASE #RETR
+    RETRACT (CMD,S )
+    S_READY=TRUE
+
+  ENDSWITCH
+
+END ; END OF MAIN 
+
+;*****************************
+
+DEF  ADVSPOT (CMD :IN,S :IN )
+
+  DECL S_COMMAND CMD
+  DECL SPOT_TYPE S
+
+END ;(ADVSPOT)
+
+;*****************************
+
+
+;*****************************
+
+DEF  PRESPOT (CMD :IN,S :IN )
+
+  DECL S_COMMAND CMD
+  DECL SPOT_TYPE S
+
+END ;(PRESPOT)
+
+;*****************************
+
+
+DEF  SPOT (CMD :IN,S :IN )
+
+  DECL S_COMMAND CMD
+  DECL SPOT_TYPE S
+
+END ;(SPOT)
+
+;*****************************
+
+DEF  RETRACT (CMD :IN,S :IN )
+
+  DECL S_COMMAND CMD
+  DECL SPOT_TYPE S
+
+END ;(RETR)
+
+;*****************************
+
+DEF  INIT ( )
+END ;(INIT)

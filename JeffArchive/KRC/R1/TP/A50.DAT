@@ -1,0 +1,29 @@
+&ACCESS  R
+&COMMENT TAST Sensor main programm
+DEFDAT  A50 PUBLIC
+
+DECL A_SENSOR_T SEN_PARA_ACT={BIAS 0.0,H_GAIN 75.0,V_GAIN 67.5,ACCUM_OFS #IDLE,STS #IDLE}
+DECL A_SENSOR_T A_SENS_FIFO[6] ;memory of ADVANCE pointer to synchronize main task
+A_SENS_FIFO[1]={BIAS 0.0,H_GAIN 75.0,V_GAIN 67.5,ACCUM_OFS #IDLE,STS #IDLE}
+A_SENS_FIFO[2]={BIAS 0.0,H_GAIN 75.0,V_GAIN 67.5,ACCUM_OFS #IDLE,STS #IDLE}
+A_SENS_FIFO[3]={BIAS 0.0,H_GAIN 75.0,V_GAIN 67.5,ACCUM_OFS #IDLE,STS #IDLE}
+A_SENS_FIFO[4]={BIAS 0.0,H_GAIN 75.0,V_GAIN 67.5,ACCUM_OFS #IDLE,STS #IDLE}
+A_SENS_FIFO[5]={BIAS 3.0,H_GAIN 0.04,V_GAIN 24.0,ACCUM_OFS #IDLE,STS #ACTIVE}
+A_SENS_FIFO[6]={BIAS 3.0,H_GAIN 0.04,V_GAIN 24.0,ACCUM_OFS #IDLE,STS #ACTIVE}
+INT SEN_WEAV_FIG ;weave pattern TAST sensor
+
+;-----------------------------
+;  ARC-TECH defined messages
+;-----------------------------
+
+DECL MSG_T EMPTY_MSG={VALID FALSE,RELEASE FALSE,TYP #NOTIFY,MODUL[] " ",KEY[] " ",PARAM_TYP #VALUE,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of  selected sensor simulation mode
+;-----------------------------------------------------------------------------
+DECL MSG_T SENSOR_SIMU={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A50",KEY[] "SensorSimulation",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;message incase of TEST1/TEST2 if ACCUM_OFFSET is activ
+;-----------------------------------------------------------------------------
+DECL MSG_T SENSOR_OFS={VALID FALSE,RELEASE FALSE,TYP #NOTIFY,MODUL[] "A50",KEY[] "SensorOffsetActive",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+ENDDAT

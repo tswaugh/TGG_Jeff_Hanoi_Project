@@ -1,0 +1,149 @@
+&ACCESS  RO
+&COMMENT A10 User message handler
+DEF  ARC_MSG (MSG_CALL :IN )
+  ;------------------------------------------------
+  ; dynamic message text 
+  ; Bit 4 including Bit 0 is reserved for $STOPMESS
+  ; necessary for compatibility
+  ; max. length of complete message 80 characters
+  ;------------------------------------------------
+  ;FOLD DECLARATIONS;%{PE}%V3.2.0,%MKUKATPBASIS,%CINIT,%VCOMMON,%P
+  DECL MSG_CALL_T MSG_CALL
+  DECL STATE_T L_STATE
+  DECL CHAR S_TMP[95]
+  DECL CHAR T_MSG[7],TMP_MSG[7]
+  INT L_OFS,K_OFS,I,J,K,L,BIT_MASK
+
+  IMPORT USR_MSG_T S_MSG[12] IS /R1/A10..S_MSG ;12 messages with 7 characters and length
+  IMPORT MSG_T EMPTY_MSG IS /R1/A10..EMPTY_MSG
+  IMPORT INT TMP_WLD_CTRL IS /R1/A10..TMP_WLD_CTRL
+  IMPORT BOOL FIRST_MSG IS /R1/A10..FIRST_MSG
+
+  ;ENDFOLD (DECLARATIONS)
+
+  SWITCH  MSG_CALL
+
+  CASE #DEF_USR_MSG
+
+    ;FOLD USER ERROR MESSAGES;%{E}%V3.2.0,%MKUKATPUSER,%CSTOP,%VSTOP,%P
+    ;maximum of length of text 7 characters and length of text 
+    S_MSG[1]={MSG[] "Failure",S_LENGTH 7}
+    S_MSG[2]={MSG[] "current",S_LENGTH 7}
+    S_MSG[3]={MSG[] "gas",S_LENGTH 3}
+    S_MSG[4]={MSG[] "water",S_LENGTH 5}
+    S_MSG[5]={MSG[] "wire",S_LENGTH 4}
+    S_MSG[6]={MSG[] "DVA",S_LENGTH 3}
+    S_MSG[7]={MSG[] "DVB",S_LENGTH 3}
+    S_MSG[8]={MSG[] "sensDrv",S_LENGTH 7}
+    S_MSG[9]={MSG[] "voltage",S_LENGTH 7}
+    S_MSG[10]={MSG[] "MK2000",S_LENGTH 6}
+    S_MSG[11]={MSG[] "cleaner",S_LENGTH 7}
+    S_MSG[12]={MSG[] "robot",S_LENGTH 5}
+    ;ENDFOLD (USER ERROR MESSAGES)
+
+  CASE #SAF_CYCFLAG 
+
+    ;FOLD PREPARED SYSTEM INPUTS;%{E}%V3.2.0,%MKUKATPUSER,%CSTOP,%VSTOP,%P
+    TMP_WLD_CTRL=0
+
+    IF $IN[A_FLT_NUM[1]]<>A_FLT_CYCFLG[1].STATE THEN ; usual the collection message of welding machine
+      TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B0001'
+    ENDIF
+
+    IF $IN[A_FLT_NUM[2]]<>A_FLT_CYCFLG[2].STATE THEN ; current
+      TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B0010'
+    ENDIF
+
+    IF $IN[A_FLT_NUM[3]]<>A_FLT_CYCFLG[3].STATE THEN ; gas
+      TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B0100'
+    ENDIF
+
+    IF $IN[A_FLT_NUM[4]]<>A_FLT_CYCFLG[4].STATE THEN ; water
+      TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B1000'
+    ENDIF
+    ;ENDFOLD (PREPARED SYSTEM INPUTS)
+    ;FOLD USER CONTROL INPUTS;%{E}%V3.2.0,%MKUKATPUSER,%CSTOP,%VSTOP,%P
+    ;Please integrate your modifications
+    ;    Examples: 
+    ;        IF $IN[45] THEN
+    ;           TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B00100000'   
+    ;        ENDIF
+    ;        IF $IN[46] THEN
+    ;           TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B01000000'   
+    ;        ENDIF
+    ;        IF $IN[47] THEN
+    ;           TMP_WLD_CTRL=TMP_WLD_CTRL B_OR 'B1000000'   
+    ;        ENDIF 
+    ;ENDFOLD (USER CONTROL INPUTS)
+
+  CASE #GIVE_USR_MSG
+
+    ;FOLD MESSAGE MECHANISM;%{PE}%V3.2.0,%MKUKATPBASIS,%CINIT,%VCOMMON,%P
+
+    A_SEAM_CTRL=TMP_WLD_CTRL ; for real setinfo for GUI
+    L_OFS=0
+    S_TMP[]=" "
+    FIRST_MSG=FALSE
+
+    FOR I=0 TO  11
+
+      IF I == 0 THEN 
+        BIT_MASK= 1
+      ELSE
+        BIT_MASK = BIT_MASK*2
+      ENDIF
+      BIT_MASK = BIT_MASK B_AND 'B111111111111'
+
+      IF (TMP_WLD_CTRL B_AND BIT_MASK ) >0 THEN
+
+        IF ((I<>0) AND (FIRST_MSG==TRUE)) THEN
+          L_OFS=L_OFS+1
+          S_TMP[L_OFS]="+"
+        ENDIF
+
+        FOR L=1 TO  7
+          TMP_MSG[L]=" "
+        ENDFOR
+
+        FIRST_MSG=TRUE
+        K=S_MSG[I+1].S_LENGTH
+
+        FOR J=1 TO  K
+          TMP_MSG[J]=S_MSG[I+1].MSG[J]
+        ENDFOR
+
+        SWRITE(S_TMP[],L_STATE,L_OFS,"%s",TMP_MSG[])
+
+        L_OFS=L_OFS-(7-S_MSG[I+1].S_LENGTH)
+      ENDIF
+
+    ENDFOR
+
+    $MSG_T={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+    IF L_OFS>80 THEN
+      L_OFS=80
+    ENDIF
+
+    FOR I=1 TO  L_OFS
+      $MSG_T.KEY[I]=S_TMP[I]
+    ENDFOR
+
+    $MSG_T.VALID=TRUE
+    HALT
+    $MSG_T.RELEASE=TRUE
+
+    WHILE  $MSG_T.VALID
+      WAIT SEC 0.05
+    ENDWHILE
+
+    WAIT SEC 0.2
+    $MSG_T=EMPTY_MSG
+    WAIT SEC 0.2
+    ;ENDFOLD (MESSAGE MECHANISM)
+
+  DEFAULT
+
+  ENDSWITCH
+
+END

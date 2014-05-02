@@ -1,0 +1,449 @@
+&ACCESS  R
+&COMMENT ARC_TECH initializing
+DEF  A10_INI ( )
+  ;********************************************
+  ; set binary outputs  to initializing value
+  ; set analog output to zero
+  ; calculate weld controller line
+  ; activate cyc flag[2],[4],[5]             
+  ;********************************************
+  DECL CHAR SUB_NAME[8]
+
+  DECL INT INDEX,I
+
+  AB_OE4_1='B1111' ; Allen Bradley OE4 Anlaogoutputs
+  AB_OE4_2='B1111' ; Allen Bradley OE4 Anlaogoutputs
+
+  A_SEAM_CTRL=0 ; RESET of Seam control information
+  SUB_NAME[]="ARCSPS  "
+  SPS_RUN (SUB_NAME[],6 )
+  TEST_PAR ( )
+  CHECK_BWD( )
+
+  IF ARC20==TRUE THEN
+    REPEAT
+      MESS_DLG (INV_ARC_TECH )
+    UNTIL ARC20==FALSE
+  ENDIF
+
+  IF PROC_ENABLE==FALSE THEN
+    MESS_DLG (NO_PROC_ENB )
+  ENDIF
+
+  IF ($EDIT_MODE==2) THEN
+    REPEAT
+      IF A_WEAV_GEN[3]==0 THEN
+        MESS_DLG (ONL_CYCANOUT )
+      ENDIF
+    UNTIL ((A_WEAV_GEN[3]<>0) OR ($EDIT_MODE<>2))
+  ENDIF
+
+  FAST_INP_CFG( )
+
+  IF OVR_CTRL THEN
+    IF (($OV_PRO<>100) AND ($MODE_OP <> #EX)) THEN
+      CHECK_OVR ( )
+    ENDIF
+  ENDIF
+
+  IF (($MODE_OP==#T1) AND ($RED_T1_OV_CP==TRUE) AND  (A_HOT_WELD==#ACTIVE) ) THEN
+    REPEAT 
+      MESS_DLG (RED_T1_OV_CP)
+    UNTIL ((A_HOT_WELD==#IDLE) OR ($MODE_OP <> #T1 ))
+  ENDIF
+
+  SAVE_OVR=-1
+  DEL_ANOUT ( )
+  CYC_ANOUT_ON ( )
+
+  A_COLD_SEAM=#IDLE
+  A_ISR4_FLAG=#IDLE
+  A_HPU_CMD=#IDLE
+  A_CLEANER=#IDLE
+  A_HPU_WFD=0
+
+  FOR INDEX=1 TO  16 ; initializing of A10-technology specified outputs
+    IF A_WLD_OUT[INDEX].OUT_NR>0 THEN
+      $OUT[A_WLD_OUT[INDEX].OUT_NR]=A_WLD_OUT[INDEX].INI
+    ENDIF
+  ENDFOR
+
+  IF (A_ANA_CLC_ON==#ACTIVE) THEN ; flag for calculating
+    CLC_SGL_LINE ( ) ; local subroutine
+    A_ANA_CLC_ON=#IDLE ; calculating only at next POWER_UP
+    A_DEF_USRMSG =FALSE
+  ENDIF
+
+  FOR I=1 TO  3
+    A_O_POST_ON[I].PULS_TIME=A_E_PR_GAS_T ;constant value of delay of valves
+  ENDFOR
+
+  INIT_FG ( )
+  A50 (#INIT_SENSOR )
+
+  ;Initialization of timer
+  $TIMER_STOP[15]=FALSE
+  $TIMER_STOP[16]=FALSE
+
+  A_WLD_ACTIV=#IDLE
+  A_ARC_INSTR=0
+  A_GAS_FLOW=#IDLE
+  A_CLD_TSTP=#IDLE
+  A_INTR_MODE=#IDLE ; no interrupt mode
+
+  INIT_ARC_VAR ( ) ; local subroutine
+
+  $CYCFLAG[2]=TRUE ;RESET of $CYCFLAG for configuration
+  $CYCFLAG[4]=TRUE
+  $CYCFLAG[5]=TRUE
+
+  FOR I=1 TO  4
+    IF A_FLT_CYCFLG[I].NO>0 THEN
+      A_FLT_NUM[I]=A_WLD_IN[A_FLT_CYCFLG[I].NO].IN_NR
+      IF A_FLT_NUM[I]==0 THEN
+        IF A_FLT_CYCFLG[I].STATE==TRUE THEN
+          A_FLT_NUM[I]=1025
+        ELSE
+          A_FLT_NUM[I]=1026
+        ENDIF
+      ENDIF
+    ELSE
+      IF A_FLT_CYCFLG[I].STATE==TRUE THEN
+        A_FLT_NUM[I]=1025
+      ELSE
+        A_FLT_NUM[I]=1026
+      ENDIF
+    ENDIF
+  ENDFOR
+
+  $CYCFLAG[4]=($IN[A_FLT_NUM[1]]==A_FLT_CYCFLG[1].STATE) AND ($IN[A_FLT_NUM[2]]==A_FLT_CYCFLG[2].STATE)
+  $CYCFLAG[5]=($IN[A_FLT_NUM[3]]==A_FLT_CYCFLG[3].STATE) AND ($IN[A_FLT_NUM[4]]==A_FLT_CYCFLG[4].STATE)
+  $CYCFLAG[2]=(($CYCFLAG[4] AND $CYCFLAG[5]) AND ($TIMER_FLAG[15]==TRUE)) OR ($TIMER_FLAG[15]==FALSE)
+
+END ;(main A10_INI)
+
+;------------------------------
+; Calculating controller lines
+;------------------------------
+DEF  CLC_SGL_LINE ( )
+
+  BOOL ERROR_FLAG
+  INT MODE,CH,N
+  REAL DELTA_X,DELTA_Y
+
+  ERROR_FLAG=FALSE
+  FOR MODE=1 TO  2
+    FOR CH=1 TO  A_ACT_AN_MAX
+      IF (A_ANAOUT_NO[CH]>0) THEN
+
+        IF (A_ANA_MAX_D[MODE,CH]<2) OR (A_ANA_MAX_D[MODE,CH]>5) THEN
+          ERROR_FLAG=TRUE
+          EXIT
+        ENDIF
+
+        FOR N=1 TO  4
+
+          IF (N+1>A_ANA_MAX_D[MODE,CH]) THEN
+            A_ANA_DEF[MODE,CH,N+1].PARA=A_ANA_DEF[MODE,CH,N].PARA+1.0
+            A_ANA_VAL[MODE,CH,N].N=A_ANA_VAL[MODE,CH,N-1].N
+            A_ANA_VAL[MODE,CH,N].M=A_ANA_VAL[MODE,CH,N-1].M
+          ELSE ; m = delta y / delta x                  b= y - mx
+            IF (A_ANA_DEF[MODE,CH,N+1].PARA-A_ANA_DEF[MODE,CH,N].PARA)<=1E-08 THEN
+              ERROR_FLAG=TRUE
+              EXIT
+            ENDIF ; (ANA_DEF[MODE,CH,N+1].PARA
+
+            DELTA_Y=A_ANA_DEF[MODE,CH,N+1].VAL-A_ANA_DEF[MODE,CH,N].VAL
+            DELTA_X=(A_ANA_DEF[MODE,CH,N+1].PARA-A_ANA_DEF[MODE,CH,N].PARA)
+            A_ANA_VAL[MODE,CH,N].M=DELTA_Y/DELTA_X
+            A_ANA_VAL[MODE,CH,N].N=A_ANA_DEF[MODE,CH,N].VAL-A_ANA_VAL[MODE,CH,N].M*A_ANA_DEF[MODE,CH,N].PARA
+            ; b = y - mx
+          ENDIF ;(N+1) < ANA_MAX
+
+        ENDFOR ;(N)
+
+        IF ERROR_FLAG==TRUE THEN
+          EXIT
+        ENDIF
+
+      ENDIF
+
+    ENDFOR ;(CH)
+
+    IF ERROR_FLAG==TRUE THEN
+      EXIT
+    ENDIF
+
+  ENDFOR ;(MODE)
+
+  IF ERROR_FLAG==TRUE THEN
+    LOOP
+      MESS_DLG (FLT_CTL_LIN ) ;in case of wrong configuration of controller lines
+    ENDLOOP
+  ENDIF
+
+END ;(local CLC_SGL_LINE)
+;-----------------------------------------
+; basic definition of function generators 
+;-----------------------------------------
+DEF  INIT_FG ( )
+
+  DECL INT N,FG_NR
+
+  A_FG_MECH1=A_WEAV_GEN[1]
+  A_FG_MECH2=A_WEAV_GEN[2]
+  A_FG_THERM=A_WEAV_GEN[3]
+
+  IF $TECH_OPT==TRUE THEN
+    FOR N=1 TO  3
+      FG_NR=A_WEAV_GEN[N]
+      IF FG_NR>0 THEN
+        $TECH[FG_NR].MODE=#OFF
+        $TECH[FG_NR].CLASS=#PATH
+        $TECH[FG_NR].FCT.ORDER=1
+        $TECH[FG_NR].FCT.CPNUM=2
+        $TECH[FG_NR].FCT.CPS1.X1=0
+        $TECH[FG_NR].FCT.CPS1.Y1=0
+        $TECH[FG_NR].FCT.CPS1.X2=1
+        $TECH[FG_NR].FCT.CPS1.Y2=0
+        $TECH[FG_NR].FCTCTRL.SCALE_IN=1
+        $TECH[FG_NR].FCTCTRL.SCALE_OUT=1
+        $TECH[FG_NR].FCTCTRL.OFFSET_IN=0
+        $TECH[FG_NR].FCTCTRL.OFFSET_OUT=0
+      ENDIF
+    ENDFOR
+
+    WEAV_DEF (#FG_MECHANIC,8,A_FG_MECH1,A_FG_MECH2,A_FG_THERM ) ; Default adjustments
+    WEAV_DEF (#FG_THERMAL,3,A_FG_MECH1,A_FG_MECH2,A_FG_THERM ) ; to update in next ARC_ON the specific FG datas
+
+    IF A_FG_MECH1>0 THEN
+      $TECH[A_FG_MECH1].FCTCTRL.GEOREF=#Y
+    ENDIF
+    IF A_FG_MECH2>0 THEN
+      $TECH[A_FG_MECH2].FCTCTRL.GEOREF=#X
+    ENDIF
+    IF A_FG_THERM>0 THEN
+      $TECH[A_FG_THERM].FCTCTRL.GEOREF=#NONE
+    ENDIF
+
+    IF ((A_FG_MECH1>0) OR (A_FG_MECH2>0) OR (A_FG_THERM>0)) THEN
+      $TECHANGLE.A=0
+      $TECHANGLE.B=0
+      $TECHANGLE.C=0
+      $TECHSYS=#TTS
+    ENDIF
+
+  ENDIF
+
+END ;(local INIT_FG ) 
+;----------------------------------------
+; set ARC-Variables
+; define FIFO - Stack
+; define error handler and retry counter
+; define basic movement parameters
+;----------------------------------------
+DEF  INIT_ARC_VAR ( )
+
+  A_WLD_ACTIV=#IDLE ; global TEST-Flag
+  A_F_WLD_COND=#IDLE
+  A_ARC_SWI=#IDLE ; Trigger Flag ARC_SWI_INT
+  A_FIFO_READ=1
+  A_FIFO_WRITE=1
+
+  RETRY_COUNT=0
+
+END ;(local INIT_ARC_VAR )
+;------------------------------
+; testing configuration
+;------------------------------
+DEF  TEST_PAR ( )
+  INT I
+
+  IF ((A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL<=A_ACT_AN_MAX)) THEN
+    MESS_DLG (WRONG_PAR )
+  ENDIF
+
+  FOR I=1 TO  A_ACT_AN_MAX
+    REPEAT 
+      IF A_ANAOUT_NO[I]==0 THEN
+        MESS_DLG (WRONG_ANA )
+      ENDIF
+    UNTIL A_ANAOUT_NO[I] <> 0
+  ENDFOR
+
+END ;(TEST_PAR)
+;------------------------------
+; testing SUBMIT is running
+;------------------------------
+DEF  SPS_RUN (PROG_SPS[] :OUT,ANZAHL :IN )
+
+  DECL INT I,OFFSET,ANZAHL,ANZAHL2
+  DECL BOOL MERKER
+  DECL STATE_T STATE
+  DECL CHAR PROG_SPS[]
+  DECL CHAR NAME_SPS[8]
+
+  LOOP
+    OFFSET=0
+    MERKER=FALSE
+    IF $PRO_STATE0==#P_ACTIVE THEN
+      SREAD($PRO_NAME0[],STATE,OFFSET,"%s",NAME_SPS[])
+      ANZAHL2=STATE.LENGTH
+      IF ANZAHL==ANZAHL2 THEN
+        FOR I=1 TO  ANZAHL
+          IF NAME_SPS[I]<>PROG_SPS[I] THEN
+            MERKER=TRUE
+            EXIT
+          ENDIF
+        ENDFOR
+        IF MERKER==FALSE THEN
+          RETURN 
+        ENDIF
+      ENDIF
+    ENDIF
+    MESS_DLG (MISS_SUB )
+  ENDLOOP
+
+END ;(SPS_RUN)
+;------------------
+; Switch off ANOUTS
+;------------------
+DEF  DEL_ANOUT ( )
+
+  INT I
+
+  IF A_WEAV_GEN[3]==0 THEN
+    FOR I=1 TO  A_ACT_AN_MAX
+      CONTINUE
+      $ANOUT[I]=0.0
+    ENDFOR
+  ELSE
+    A_TH1_ACT_O=0.0
+    A_TH2_ACT_O=0.0
+    A_TH1_ACT_G=0.0
+    A_TH2_ACT_G=0.0
+    ANOUT OFF A_O_ANA1
+    ANOUT OFF A_O_ANA2
+  ENDIF
+
+END ; ( DEL_ANOUT)
+;-------------------------------------------------
+; switch cycling analog outputs in ARC_SWI command 
+;-------------------------------------------------
+DEF  CYC_ANOUT_ON ( )
+
+  IF A_FG_THERM>0 THEN
+    ANOUT ON A_O_ANA1=A_TH1_ACT_G*$TECHVAL[A_FG_THERM]+A_TH1_ACT_O
+    ANOUT ON A_O_ANA2=A_TH2_ACT_G*$TECHVAL[A_FG_THERM]+A_TH2_ACT_O
+  ENDIF
+
+END ;(CYC_ANOUT_ON)
+;-------------------------
+;  Subroutine for messages
+;-------------------------
+DEF  MESS_DLG (MESS_T :OUT )
+
+  DECL MSG_T MESS_T
+
+  $MSG_T=MESS_T
+  $MSG_T.VALID=TRUE
+
+  IF $MSG_T.TYP<>#NOTIFY THEN
+    HALT
+    $MSG_T.RELEASE=TRUE
+  ENDIF
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+
+  WAIT SEC 0.2
+  $MSG_T=EMPTY_MSG
+
+END ;(MESS_DLG)
+;---------------------
+; CHECK OVERRIDE 100 %
+;---------------------
+DEF  CHECK_OVR ( )
+
+  $MSG_T=CHECK_HUNDRED
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+  ANSWER=$MSG_T.ANSWER
+
+  IF ANSWER==1 THEN
+    $OV_PRO=100
+  ENDIF
+
+END ; (CHECK_OVR)
+;--------------------------
+; PREPARE FAST SYNCHRONIZE
+;--------------------------
+DEF FAST_INP_CFG( )
+
+  INT I_TEMP,I
+  INT CFG_OKAY
+  FOR I = 1 TO 3   ;default initialization
+    WELD_COND[I] =1026
+    START_COND[I]    =1026
+    END_COND[I]      =1026
+    W_COND_STS[I] = FALSE
+    START_STS[I]  = FALSE
+    END_STS[I]    = FALSE
+  ENDFOR
+
+  CFG_OKAY=1
+  FOR I = 1 TO 3
+    IF (A_I_WLD_COND[I].NO) > 0 THEN
+      I_TEMP= A_WLD_IN[A_I_WLD_COND[I].NO].IN_NR 
+      IF I_TEMP > 0 THEN
+        WELD_COND[CFG_OKAY] = I_TEMP
+        W_COND_STS[CFG_OKAY]= A_I_WLD_COND[I].STATE
+        COND_SIZE=CFG_OKAY 
+        CFG_OKAY=CFG_OKAY+1
+      ENDIF
+    ENDIF
+  ENDFOR
+
+  CFG_OKAY=1
+  FOR I = 1 TO 3
+    IF (A_I_STRT_MOV[I].NO) > 0 THEN
+      I_TEMP= A_WLD_IN[A_I_STRT_MOV[I].NO].IN_NR 
+      IF I_TEMP > 0 THEN
+        START_COND[CFG_OKAY] = I_TEMP
+        START_STS[CFG_OKAY]= A_I_STRT_MOV[I].STATE
+        START_SIZE=CFG_OKAY
+        CFG_OKAY=CFG_OKAY+1
+      ENDIF
+    ENDIF
+  ENDFOR
+
+  CFG_OKAY=1
+  FOR I = 1 TO 3
+    IF (A_I_WELD_END[I].NO) > 0 THEN
+      I_TEMP= A_WLD_IN[A_I_WELD_END[I].NO].IN_NR 
+      IF I_TEMP > 0 THEN
+        END_COND[CFG_OKAY] = I_TEMP
+        END_STS[CFG_OKAY]= A_I_WELD_END[I].STATE
+        END_SIZE=CFG_OKAY
+        CFG_OKAY=CFG_OKAY+1
+      ENDIF
+    ENDIF
+  ENDFOR
+
+END ;(FAST_INP_CFG)
+;-------------------------------
+; Check BACKWARD.INI adjustments
+;-------------------------------
+DEF  CHECK_BWD( )
+  REPEAT
+    IF (($BWD_INFO B_AND 'B1001000') <> 'B1000') THEN
+      MESS_DLG (WRONG_BWD)
+    ENDIF
+  UNTIL (($BWD_INFO B_AND 'B1001000')== 'B1000')
+END ;(CHECK_BWD)

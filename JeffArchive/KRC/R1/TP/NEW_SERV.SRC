@@ -1,0 +1,15 @@
+&ACCESS  R
+&COMMENT Change of RESTART_OPTIONS
+DEF  NEW_SERV (RESTART_TYPE :IN,TIME :IN )
+  ;----------------------------------------------
+  ; To avoid incompatibilities older SW-Versions  
+  ; do not use in newer versions > R1.0.1
+  ;-----------------------------------------------
+  DECL A_RESTART_T RESTART_TYPE
+  DECL INT TIME ;[msec]
+
+  TIME=TIME*(-1)
+
+  TRIGGER  WHEN DISTANCE=0 DELAY=TIME DO A_FLT_SV_FCT=0
+
+END

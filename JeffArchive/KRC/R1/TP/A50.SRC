@@ -1,0 +1,457 @@
+&ACCESS  R
+&COMMENT TAST Sensor main programm
+DEF  A50 (SENSOR_CMD :IN,VEL :IN,AMPLITUDE :IN,WEAVE_LENGTH :IN,PATTERN :IN )
+  ;--------------------------------
+  ; Date 13.01.98 
+  ;--------------------------------
+  DECL SENS_CMD_T SENSOR_CMD
+  REAL VEL,AMPLITUDE,WEAVE_LENGTH
+  INT PATTERN
+
+  IF A50_OPTION==#ACTIVE THEN
+
+    SWITCH  SENSOR_CMD
+
+    CASE #SENS_ADV_DEF
+      SENS_ADV_DEF (VEL,WEAVE_LENGTH,PATTERN,AMPLITUDE )
+
+    CASE #SEN_FIFO_ACT
+      SEN_FIFO_ACT ( )
+
+    CASE #SENSOR_OFF
+      SENSOR_OFF ( )
+
+    CASE #I_SENSOR_OFF,#SEN_TSTOP
+      SEN_TSTOP ( )
+
+    CASE #I_SENSOR_ON
+      I_SENSOR_ON ( )
+
+    CASE #SENSOR_ON
+      SENSOR_ON ( )
+
+    CASE #INIT_SENSOR
+      INIT_SENSOR ( )
+
+    CASE #SENS_SUB_SPS
+      SENS_SUB_SPS ( )
+
+    CASE #BLOCK_SELECT
+      SENSOR_RESET ( )
+
+    CASE #SEN_PRE_ON
+      SEN_PRE_ON ( )
+
+    CASE #SYNC
+      SEN_SYNC ( )
+
+    CASE #DRY_WEAVE
+      DRY_WEAVE ( )
+
+    CASE #SYNC_START
+      SYNC_START ( )
+
+    CASE #SENS_SUB_INI
+      SEN_PARA_ACT=SEN_IDLE_PAR
+      SENS_SUB_SPS ( )
+
+    CASE #PRE_SENS
+      PRE_SENS ( )
+
+    DEFAULT
+
+    ENDSWITCH
+
+  ELSE
+
+    SWITCH  SENSOR_CMD
+
+    CASE #SENS_ADV_DEF
+
+      IF A_FG_SENSOR>0 THEN
+        A_SENS_FIFO[A_FIFO_WRITE]=SEN_IDLE_PAR
+      ENDIF
+
+    CASE #SEN_FIFO_ACT
+      SEN_FIFO_ACT ( )
+
+    CASE #INIT_SENSOR
+      PS_TEMP_SET=SEN_IDLE_PAR
+
+    DEFAULT
+
+      SENS_SUB_SPS ( )
+      SEN_PARA_ACT=SEN_IDLE_PAR
+
+    ENDSWITCH
+
+  ENDIF
+
+END ; -----( main program A50)------- 
+
+;---------------------------
+; Init sensor in ARCSPS
+;---------------------------
+DEF  SENS_SUB_SPS ( )
+
+  A_FG_SENSOR=A_WEAV_GEN[4]
+
+END ;(SENS_SUB_SPS) 
+;--------------------------
+; Pre sensor switch command
+;--------------------------
+DEF  PRE_SENS ( )
+
+  IF (A_FG_SENSOR>0) THEN
+    IF ((PS_TEMP_SET.STS==#ACTIVE)) THEN
+
+      $TECH[A_FG_SENSOR].MODE=#SINGLE
+
+      IF A_HPU_DRY_RN==#IDLE THEN
+        $TECH[A_FG_SENSOR].MODE=#CYCLE
+      ENDIF
+
+    ELSE
+      $TECH[A_FG_SENSOR].MODE=#OFF
+    ENDIF
+  ENDIF
+END ;(PRE_SENS)  
+;-----------------------------------
+; update of sensor parameter
+; new synchronization from 2.section
+;-----------------------------------
+DEF  SEN_FIFO_ACT ( )
+
+  SEN_PARA_ACT=A_SENS_FIFO[A_FIFO_READ]
+
+END ;( SEN_FIFO_ACT)
+;-------------------------------------------------
+; Sensor preparation in ADVANCE 
+; computed in advance synchronous to motion points
+;-------------------------------------------------
+DEF  SENS_ADV_DEF (L_VEL :IN,W_LENGTH :IN,MODEL :IN,AMPL :IN )
+
+  INT MODEL
+  REAL L_VEL,W_LENGTH,WEAVE_FRQ,AMPL
+
+  IF A_FG_SENSOR>0 THEN
+
+    A_SENS_FIFO[A_FIFO_WRITE]=PS_TEMP_SET
+
+    WEAVE_FRQ=L_VEL*16.667/W_LENGTH ; m/min -- > m/sec
+
+    ; triangle or double triangle
+    IF ((MODEL==3) OR (MODEL==6)) THEN
+      SEN_WEAV_FIG=MODEL
+    ELSE
+      SEN_WEAV_FIG=1 ; sine weave
+    ENDIF
+
+    $TECHPAR[A_FG_SENSOR,3]=AMPL ; weave amplitude
+    $TECHPAR[A_FG_SENSOR,4]=WEAVE_FRQ ; weave frequency
+
+    IF USR_DEF_ITV THEN
+      $TECHPAR[A_FG_SENSOR,5]=IR_ITV_TIME
+    ELSE
+      $TECHPAR[A_FG_SENSOR,5]=$FILTER
+    ENDIF
+
+    $TECHPAR[A_FG_SENSOR,6]=PS_TEMP_SET.BIAS ; vertical offset --> ITV
+    $TECHPAR[A_FG_SENSOR,7]=PS_TEMP_SET.H_GAIN/25000.0 ; lateral gain 
+    $TECHPAR[A_FG_SENSOR,8]=PS_TEMP_SET.V_GAIN/2.2222 ; vertical gain
+
+  ENDIF
+
+END ;(SENS_ADV_DEF)
+;-----------------------------------
+; Seam tracking sensor ON in advance
+; no new synchronization
+; without delay of sensor
+; Mechanical function generators off
+; Thermal function generators off
+;-----------------------------------
+DEF  SEN_PRE_ON ( )
+
+  IF (A_FG_SENSOR>0) THEN
+
+    IF ((PS_TEMP_SET.STS==#ACTIVE) AND (A_HPU_DRY_RN==#IDLE)) THEN
+
+      IF A_FG_MECH1>0 THEN
+        $TECH[A_FG_MECH1].MODE=#OFF
+      ENDIF
+
+      IF A_FG_MECH2>0 THEN
+        $TECH[A_FG_MECH2].MODE=#OFF
+      ENDIF
+
+      IF A_FG_THERM>0 THEN
+        $TECH[A_FG_THERM].MODE=#OFF
+      ENDIF
+
+      $TECH[A_FG_SENSOR].MODE=#CYCLE ; for weaving
+
+    ELSE
+      IF $TECH[A_FG_SENSOR].MODE==#CYCLE THEN
+        $TECH[A_FG_SENSOR].MODE=#SINGLE
+      ENDIF
+    ENDIF
+
+  ENDIF
+
+END ; (SEN_PRE_ON) 
+;--------------------------------
+; Synchronize Sensor in main task
+;--------------------------------
+DEF  SEN_SYNC ( )
+
+  IF ((SEN_PARA_ACT.STS==#ACTIVE) AND (A_FG_SENSOR>0)) THEN
+
+    ;READ-Pointer is already incremented
+    $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+
+    IF SEN_DLY_OPT==TRUE THEN
+      $SEN_PINT_C[2]=A_SENS_DELAY ; number of patterns
+    ELSE
+      $SEN_PINT_C[2]=0 ; at once
+    ENDIF
+
+    IF ((A_WLD_ACTIV==#ACTIVE)) THEN
+      $SEN_PINT_C[1]=2 ; synchronization
+    ELSE
+      $SEN_PINT_C[1]=1 ; no synchronization
+    ENDIF
+
+    IF A_HPU_DRY_RN==#IDLE THEN
+      $TECH_C[A_FG_SENSOR].MODE=#CYCLE
+    ENDIF
+  ELSE
+    $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+  ENDIF
+
+END ; (SEN_SYNC)  
+;--------------------------------
+; Weaving without synchronization
+;--------------------------------
+DEF  DRY_WEAVE ( )
+
+  IF ((A_FG_SENSOR>0) AND (A_HPU_DRY_RN==#IDLE) AND (SEN_PARA_ACT.STS==#ACTIVE)) THEN
+
+    IF A_FG_MECH1>0 THEN
+      $TECH_C[A_FG_MECH1].MODE=#OFF
+    ENDIF
+
+    IF A_FG_MECH2>0 THEN
+      $TECH_C[A_FG_MECH2].MODE=#OFF
+    ENDIF
+
+    IF A_FG_THERM>0 THEN
+      $TECH_C[A_FG_THERM].MODE=#OFF
+    ENDIF
+
+    $SEN_PINT_C[1]=2 ;synchronization
+    $TECH_C[A_FG_SENSOR].MODE=#CYCLE ; necessary for weaving
+
+  ENDIF
+
+END ; (DRY_WEAVE)
+;-----------------------------------
+; Seam tracking sensor ON,but 
+; no new synchronization
+; without delay of sensor
+; Mechanical function generators off
+; Thermal function generators off
+;-----------------------------------
+DEF  I_SENSOR_ON ( )
+
+  IF (A_FG_SENSOR>0) THEN
+    IF ((A_HPU_DRY_RN<>#ACTIVE) AND (SEN_PARA_ACT.STS==#ACTIVE)) THEN
+
+      IF A_FG_MECH1>0 THEN
+        $TECH_C[A_FG_MECH1].MODE=#OFF
+      ENDIF
+
+      IF A_FG_MECH2>0 THEN
+        $TECH_C[A_FG_MECH2].MODE=#OFF
+      ENDIF
+
+      IF A_FG_THERM>0 THEN
+        $TECH_C[A_FG_THERM].MODE=#OFF
+      ENDIF
+
+      $SEN_PINT_C[1]=1 ; no new reference
+      $SEN_PINT_C[2]=0 ; delay of patterns
+      $TECH_C[A_FG_SENSOR].MODE=#CYCLE
+
+    ELSE
+      IF $TECH_C[A_FG_SENSOR].MODE==#CYCLE THEN
+        $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+      ENDIF
+    ENDIF
+  ENDIF
+
+END ; (I_SENSOR_ON)
+;-----------------------------------------
+; Forced synchronization from cold weaving
+;-----------------------------------------
+DEF  SYNC_START ( )
+
+  IF ((A_FG_SENSOR>0) AND (SEN_PARA_ACT.STS==#ACTIVE) AND (A_HPU_DRY_RN==#IDLE)) THEN
+    $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+    $SEN_PINT_C[1]=2 ; new reference
+    $SEN_PINT_C[2]=1 ; delay of patterns
+    $TECH_C[A_FG_SENSOR].MODE=#CYCLE
+  ENDIF
+
+END ; (SYNC_START)
+;-----------------------------------
+; TAST ON: normal track sequence
+; Mechanical function generators off
+; Thermal function generators off
+; Synchronization ever or after ARC_ON
+; main task 
+;-----------------------------------
+DEF  SENSOR_ON ( )
+
+  IF ((A_FG_SENSOR>0) AND (A_HPU_DRY_RN<>#ACTIVE)) THEN
+    IF SEN_PARA_ACT.STS==#ACTIVE THEN
+
+      IF A_FG_MECH1>0 THEN
+        $TECH_C[A_FG_MECH1].MODE=#OFF
+      ENDIF
+
+      IF A_FG_MECH2>0 THEN
+        $TECH_C[A_FG_MECH2].MODE=#OFF
+      ENDIF
+
+      IF A_FG_THERM>0 THEN
+        $TECH_C[A_FG_THERM].MODE=#OFF
+      ENDIF
+
+      $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+
+      ;Pointer is already incremented
+      $SEN_PINT_C[1]=2 ; synchronization
+
+      IF SEN_DLY_OPT==TRUE THEN
+        $SEN_PINT_C[2]=A_SENS_DELAY ; number of patterns
+      ELSE
+        $SEN_PINT_C[2]=0 ; at once
+      ENDIF
+
+      $TECH_C[A_FG_SENSOR].MODE=#CYCLE
+
+    ELSE
+      IF $TECH_C[A_FG_SENSOR].MODE==#CYCLE THEN
+        $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+      ENDIF
+    ENDIF
+  ENDIF
+
+END ;(SENSOR_ON)
+;------------------------
+;Seam tracking sensor OFF
+;------------------------
+DEF  SENSOR_OFF ( )
+
+  IF A_FG_SENSOR>0 THEN
+
+    IF SEN_PARA_ACT.ACCUM_OFS==#ACTIVE THEN
+      $TECH[A_FG_SENSOR].MODE=#SINGLE
+      IF (($MODE_OP==#T1) OR ($MODE_OP==#T2)) THEN
+        MESS_DLG (SENSOR_OFS )
+      ENDIF
+    ELSE
+      $TECH[A_FG_SENSOR].MODE=#OFF
+    ENDIF
+
+  ENDIF
+
+END ;(SENSOR_OFF) 
+;------------------
+; interpreter stop
+;------------------
+DEF  SEN_TSTOP ( )
+
+  IF SEN_PARA_ACT.STS==#ACTIVE THEN
+    IF A_FG_SENSOR>0 THEN
+      $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+    ENDIF
+  ENDIF
+
+END ;(SEN_TSTOP)
+;-------------------------------------
+; initializing of seam tracking sensor
+;-------------------------------------
+DEF  INIT_SENSOR ( )
+
+  A_FG_SENSOR=A_WEAV_GEN[4]
+
+  IF A_FG_SENSOR>0 THEN
+
+    $TECH[A_FG_SENSOR].CLASS=#DATALINK
+    $TECH[A_FG_SENSOR].FCTCTRL.GEOREF=#Z
+    $TECH[A_FG_SENSOR].MODE=#OFF
+    $TECHSYS=#TTS
+
+    $TECHPAR[A_FG_SENSOR,3]=0
+    $TECHPAR[A_FG_SENSOR,4]=0
+    $TECHPAR[A_FG_SENSOR,5]=0
+    $TECHPAR[A_FG_SENSOR,7]=0
+    $TECHPAR[A_FG_SENSOR,8]=0
+    $TECHPAR[A_FG_SENSOR,9]=1 ; --> REL Correction ; 0 --> ABS correction
+
+    IF USR_DEF_ITV THEN
+      $TECHPAR[A_FG_SENSOR,5]=IR_ITV_TIME
+    ELSE
+      $TECHPAR[A_FG_SENSOR,5]=$FILTER
+    ENDIF
+
+    PS_TEMP_SET=SEN_IDLE_PAR ; Default set in case of programms without A50-Option 
+
+    IF (((USR_DEF_ITV==TRUE) AND (IR_ITV_TIME==0)) OR ((USR_DEF_ITV==FALSE) AND ($FILTER==0))) THEN
+      MESS_DLG (SENSOR_SIMU )
+    ENDIF
+
+  ENDIF
+
+END ;(INIT_SENSOR)
+;-------------
+; Block select
+;-------------
+DEF  SENSOR_RESET ( )
+
+  IF A_FG_SENSOR>0 THEN
+    $TECH[A_FG_SENSOR].MODE=#OFF
+  ENDIF
+
+END ;(SENSOR_RESET)
+;-------------------------
+;  Subroutine for messages
+;-------------------------
+DEF  MESS_DLG (MESS_T :OUT )
+
+  DECL MSG_T MESS_T
+
+  $MSG_T=MESS_T
+  $MSG_T.VALID=TRUE
+
+  IF $MSG_T.TYP<>#NOTIFY THEN
+    WAIT SEC 0.3
+    HALT
+    $MSG_T.RELEASE=TRUE
+    WAIT SEC 0.3
+  ENDIF
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+
+  WAIT SEC 0.2
+  $MSG_T=EMPTY_MSG
+
+END ;(MESS_DLG)
+
+
+
+
+

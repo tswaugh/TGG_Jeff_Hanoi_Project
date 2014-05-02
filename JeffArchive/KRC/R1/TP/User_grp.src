@@ -1,0 +1,348 @@
+&ACCESS  R
+&COMMENT USER GRIPPER package
+DEF  USER_GRP (INSTR :IN,G_NO :IN,S_NO :IN,PARA :IN )
+  ;=====================================
+  ; FUNCTION :  user gripper routines
+  ; Package:  UserGripper
+  ; Version: V3.2.0
+  ;=====================================
+
+  INT G_NO,S_NO
+  DECL GRP_TYP PARA
+  INT INSTR,MODE
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  MAX_GRP_CHK (G_NO )
+
+  SWITCH  INSTR
+  CASE 0 ;init part for user gripper
+    INIT (G_NO,S_NO )
+  CASE 1 ;gripper close & open without advance
+    GRP (G_NO,S_NO )
+  CASE 3 ;gripper close & open with advance
+    GRP_APO (G_NO,S_NO )
+  CASE 4 ;check gripper
+    GRP_CHK (G_NO,S_NO )
+  CASE 5 ;manual functions
+    GRP_MANUAL (G_NO )
+  DEFAULT
+    MESS (6,2 ) ;function unknown
+  ENDSWITCH
+
+END ; end of main
+
+
+;====================================
+;init part for user gripper
+;====================================
+DEF  INIT (G_NO :IN,S_NO :IN ) 
+INT G_NO, S_NO
+
+END ;end of nit part for user gripper
+
+
+;=====================================
+;gripper close & open without advance
+;=====================================
+DEF  GRP (GRP_NO :IN,S_NO :IN )
+
+  INT GRP_NO,S_NO
+
+  SWITCH  GRIPPER[GRP_NO].TYPE ;switch type of gripper
+  CASE 98 ;not supported from ILF
+    ;example for new gripper type
+    SWITCH  S_NO
+    CASE 1 ;open my gripper
+      $OUT[GRIPPER[GRP_NO].OUT3]=FALSE
+      $OUT[GRIPPER[GRP_NO].OUT4]=FALSE
+      $OUT[GRIPPER[GRP_NO].OUT1]=TRUE
+      $OUT[GRIPPER[GRP_NO].OUT2]=TRUE
+      WAIT FOR   NOT $IN[GRIPPER[GRP_NO].IN3]
+      WAIT FOR   NOT $IN[GRIPPER[GRP_NO].IN4]
+      WAIT FOR  $IN[GRIPPER[GRP_NO].IN1]
+      WAIT FOR  $IN[GRIPPER[GRP_NO].IN2]
+    CASE 2 ;close my gripper
+      $OUT[GRIPPER[GRP_NO].OUT1]=FALSE
+      $OUT[GRIPPER[GRP_NO].OUT2]=FALSE
+      $OUT[GRIPPER[GRP_NO].OUT3]=TRUE
+      $OUT[GRIPPER[GRP_NO].OUT4]=TRUE
+      WAIT FOR   NOT $IN[GRIPPER[GRP_NO].IN1]
+      WAIT FOR   NOT $IN[GRIPPER[GRP_NO].IN2]
+      WAIT FOR  $IN[GRIPPER[GRP_NO].IN3]
+      WAIT FOR  $IN[GRIPPER[GRP_NO].IN4]
+    DEFAULT
+      MESS (2,2 ) ;no valid gripper status
+    ENDSWITCH
+    ;end of example for new gripper type
+
+  CASE 99 ;not supported from ILF
+    ;example for new gripper
+    SWITCH  S_NO
+    CASE 1 ;open my gripper
+      $OUT[MY_GRIPPER.CLS.OUT.S1]=FALSE
+      $OUT[MY_GRIPPER.CLS.OUT.S2]=FALSE
+      $OUT[MY_GRIPPER.OPN.OUT.S1]=TRUE
+      $OUT[MY_GRIPPER.OPN.OUT.S2]=TRUE
+      WAIT FOR  $IN[MY_GRIPPER.OPN.IN.S1]
+      WAIT FOR  $IN[MY_GRIPPER.OPN.IN.S2]
+    CASE 2 ;close my gripper
+      $OUT[MY_GRIPPER.OPN.OUT.S1]=FALSE
+      $OUT[MY_GRIPPER.OPN.OUT.S2]=FALSE
+      $OUT[MY_GRIPPER.CLS.OUT.S1]=TRUE
+      $OUT[MY_GRIPPER.CLS.OUT.S2]=TRUE
+      WAIT FOR  $IN[MY_GRIPPER.CLS.IN.S1]
+      WAIT FOR  $IN[MY_GRIPPER.CLS.IN.S2]
+    DEFAULT
+      MESS (2,2 ) ;no valid gripper status
+    ENDSWITCH
+    ;end of example for new gripper
+  CASE 100
+
+  CASE 101
+
+  CASE 102
+
+  CASE 103
+
+  DEFAULT
+    MESS (1,2 ) ;no valid gripper type
+  ENDSWITCH
+END ;end of part for gripper close & open without advance
+
+
+;=====================================
+;gripper close & open with advance
+;=====================================
+DEF  GRP_APO (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  GRIPPER[G_NO].TYPE ;switch type of gripper
+  CASE 98 ;not supported from ILF
+    ;example for new gripper type
+    SWITCH  S_NO
+    CASE 1 ;open my gripper
+      $OUT[GRIPPER[G_NO].OUT3]=FALSE
+      $OUT[GRIPPER[G_NO].OUT4]=FALSE
+      $OUT[GRIPPER[G_NO].OUT1]=TRUE
+      $OUT[GRIPPER[G_NO].OUT2]=TRUE
+    CASE 2 ;close my gripper
+      $OUT[GRIPPER[G_NO].OUT1]=FALSE
+      $OUT[GRIPPER[G_NO].OUT2]=FALSE
+      $OUT[GRIPPER[G_NO].OUT3]=TRUE
+      $OUT[GRIPPER[G_NO].OUT4]=TRUE
+    DEFAULT
+      MESS (2,2 ) ;no valid gripper status
+    ENDSWITCH
+    ;end of example for new gripper type
+
+  CASE 99 ;not supported from ILF
+    ;example for new gripper
+    SWITCH  S_NO
+    CASE 1 ;open my gripper
+      $OUT[MY_GRIPPER.CLS.OUT.S1]=FALSE
+      $OUT[MY_GRIPPER.CLS.OUT.S2]=FALSE
+      $OUT[MY_GRIPPER.OPN.OUT.S1]=TRUE
+      $OUT[MY_GRIPPER.OPN.OUT.S2]=TRUE
+    CASE 2 ;close my gripper
+      $OUT[MY_GRIPPER.OPN.OUT.S1]=FALSE
+      $OUT[MY_GRIPPER.OPN.OUT.S2]=FALSE
+      $OUT[MY_GRIPPER.CLS.OUT.S1]=TRUE
+      $OUT[MY_GRIPPER.CLS.OUT.S2]=TRUE
+    DEFAULT
+      BRAKE
+      MESS (2,1 ) ;no valid gripper status
+    ENDSWITCH
+    ;end of example for new gripper
+  CASE 100
+
+  CASE 101
+
+  CASE 102
+
+  CASE 103
+
+  DEFAULT
+    BRAKE
+    REPEAT
+      MESS (1,1 ) ;no valid gripper type
+    UNTIL $IN[1026]
+  ENDSWITCH
+END ;end of part for gripper close & open with advance
+
+;=====================================
+;part for gripper check
+;=====================================
+DEF  GRP_CHK (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  GRIPPER[G_NO].TYPE ;switch type of gripper
+  CASE 98 ;not supported from ILF
+    ;example for new gripper type
+    SWITCH  S_NO
+    CASE 1 ;check  my gripper open
+      IF  NOT $IN[GRIPPER[G_NO].IN1] OR  NOT $IN[GRIPPER[G_NO].IN2] OR $IN[GRIPPER[G_NO].IN3] OR $IN[GRIPPER[G_NO].IN4] THEN
+        BRAKE
+        REPEAT
+          MESS (6,2 )
+        UNTIL $IN[GRIPPER[G_NO].IN1] AND $IN[GRIPPER[G_NO].IN2] AND  NOT $IN[GRIPPER[G_NO].IN3] AND  NOT $IN[GRIPPER[G_NO].IN4]
+      ENDIF
+    CASE 2 ; check my gripper close
+      IF  NOT $IN[GRIPPER[G_NO].IN3] OR  NOT $IN[GRIPPER[G_NO].IN4] OR $IN[GRIPPER[G_NO].IN1] OR $IN[GRIPPER[G_NO].IN2] THEN
+        BRAKE
+        REPEAT
+          MESS (7,2 )
+        UNTIL $IN[GRIPPER[G_NO].IN3] AND $IN[GRIPPER[G_NO].IN4] AND  NOT $IN[GRIPPER[G_NO].IN1] AND  NOT $IN[GRIPPER[G_NO].IN2]
+      ENDIF
+    DEFAULT
+      BRAKE
+      MESS (2,1 ) ;no valid gripper status
+    ENDSWITCH
+    ;end of example for new gripper type
+
+  CASE 99 ;not supported from ILF
+    ;example for new gripper
+    SWITCH  S_NO
+    CASE 1 ;check  my gripper open
+      IF  NOT $IN[MY_GRIPPER.OPN.IN.S1] OR  NOT $IN[MY_GRIPPER.OPN.IN.S2] OR $IN[MY_GRIPPER.CLS.IN.S1] OR $IN[MY_GRIPPER.CLS.IN.S2] THEN
+        BRAKE
+        REPEAT
+          MESS (6,2 )
+        UNTIL $IN[MY_GRIPPER.OPN.IN.S1] AND $IN[MY_GRIPPER.OPN.IN.S2] AND  NOT $IN[MY_GRIPPER.CLS.IN.S1] AND  NOT $IN[MY_GRIPPER.CLS.IN.S2]
+      ENDIF
+    CASE 2 ; check my gripper close
+      IF $IN[MY_GRIPPER.OPN.IN.S1] OR $IN[MY_GRIPPER.OPN.IN.S2] OR  NOT $IN[MY_GRIPPER.CLS.IN.S1] OR  NOT $IN[MY_GRIPPER.CLS.IN.S2] THEN
+        BRAKE
+        REPEAT
+          MESS (7,2 )
+        UNTIL  NOT $IN[MY_GRIPPER.OPN.IN.S1] AND  NOT $IN[MY_GRIPPER.OPN.IN.S2] AND $IN[MY_GRIPPER.CLS.IN.S1] AND $IN[MY_GRIPPER.CLS.IN.S2]
+      ENDIF
+    DEFAULT
+      BRAKE
+      MESS (2,1 ) ;no valid gripper status
+    ENDSWITCH
+    ;end of example for new gripper
+  CASE 100
+
+  CASE 101
+
+  CASE 102
+
+  CASE 103
+
+  DEFAULT
+    BRAKE
+    REPEAT
+      MESS (1,1 ) ;no valid gripper type
+    UNTIL $IN[1026]
+  ENDSWITCH
+END ;end of part for gripper check
+
+;=====================================
+;part for manual functions
+;=====================================
+DEF  GRP_MANUAL (G_NO :IN )
+
+  INT G_NO
+
+  SWITCH  GRIPPER[G_NO].TYPE ;switch type of gripper
+  CASE 98 ;not supported from ILF
+    ;example for new gripper type
+    IF $OUT[GRIPPER[G_NO].OUT3] OR $OUT[GRIPPER[G_NO].OUT4] THEN
+      $OUT[GRIPPER[G_NO].OUT3]=FALSE
+      $OUT[GRIPPER[G_NO].OUT4]=FALSE
+      $OUT[GRIPPER[G_NO].OUT1]=TRUE
+      $OUT[GRIPPER[G_NO].OUT2]=TRUE
+    ELSE
+      $OUT[GRIPPER[G_NO].OUT1]=FALSE
+      $OUT[GRIPPER[G_NO].OUT2]=FALSE
+      $OUT[GRIPPER[G_NO].OUT3]=TRUE
+      $OUT[GRIPPER[G_NO].OUT4]=TRUE
+    ENDIF
+    ;end of example for new gripper type
+
+  CASE 99 ;not supported from ILF
+    ;example for new gripper
+    IF $OUT[MY_GRIPPER.CLS.OUT.S1] OR $OUT[MY_GRIPPER.CLS.OUT.S2] THEN
+      $OUT[MY_GRIPPER.CLS.OUT.S1]=FALSE
+      $OUT[MY_GRIPPER.CLS.OUT.S2]=FALSE
+      $OUT[MY_GRIPPER.OPN.OUT.S1]=TRUE
+      $OUT[MY_GRIPPER.OPN.OUT.S2]=TRUE
+    ELSE
+      $OUT[MY_GRIPPER.OPN.OUT.S1]=FALSE
+      $OUT[MY_GRIPPER.OPN.OUT.S2]=FALSE
+      $OUT[MY_GRIPPER.CLS.OUT.S1]=TRUE
+      $OUT[MY_GRIPPER.CLS.OUT.S2]=TRUE
+    ENDIF
+    ;end of example for new gripper
+  CASE 100
+
+  CASE 101
+
+  CASE 102
+
+  CASE 103
+
+  DEFAULT
+    MESS (1,1 ) ;no valid gripper type
+  ENDSWITCH
+END ;end of part for manual functions
+
+
+;=====================================
+;case gripper field dimension is changed
+;=====================================
+DEF  MAX_GRP_CHK (G_NO :IN )
+
+  INT G_NO
+
+  IF G_NO>MAXGRIPPER THEN
+    REPEAT
+      MESS (3,2 )
+    UNTIL (G_NO>MAXGRIPPER)
+  ENDIF
+END
+
+DEF  MESS (MESS_NR,OPT ) ;============
+  ;Error message for gripper package
+  ;=====================================
+  INT MESS_NR,OPT
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  $MSG_T=EMPTY_MSG
+  SWITCH  MESS_NR
+  CASE 1
+    $MSG_T.KEY[]="TypeOfGripperIsWrong"
+  CASE 2
+    $MSG_T.KEY[]="StatusOfGripperIsWrong"
+  CASE 3
+    $MSG_T.KEY[]="GripperNoExist"
+  CASE 4
+    $MSG_T.KEY[]="GripperNoConfigurated"
+  CASE 5
+    $MSG_T.KEY[]="FunctionUnknown"
+  CASE 6
+    $MSG_T.KEY[]="GripperNotOpen"
+  CASE 7
+    $MSG_T.KEY[]="GripperNotClosed"
+
+  DEFAULT
+    $MSG_T.KEY[]="MessageNumberIsWrong"
+  ENDSWITCH
+  SWITCH  OPT
+  CASE 1
+    $MSG_T.VALID=TRUE
+    WHILE  $MSG_T.VALID
+      WAIT SEC 0.05
+    ENDWHILE
+    WAIT SEC 0.2
+  CASE 2
+    $MSG_T.VALID=TRUE
+    HALT
+  DEFAULT
+  ENDSWITCH
+  $MSG_T=EMPTY_MSG
+END
+

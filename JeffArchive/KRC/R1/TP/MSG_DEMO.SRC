@@ -1,0 +1,71 @@
+&ACCESS  RV
+&COMMENT Example on user messages
+DEF  MSG_DEMO ( )
+
+  DECL INT ANSWER
+  DECL INT OFFSET
+  DECL STATE_T STATE
+  DECL MSG_T EMPTY_MSG
+
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #NOTIFY,MODUL[] " ",KEY[] " ",PARAM_TYP #VALUE,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  ;---------------------QUITTIERUNGSMELDUNG----------
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.MODUL[]=" "
+  $MSG_T.KEY[]="DEMO: QUIT-MESSAGE + %1"
+  $MSG_T.PARAM[]="PARAM"
+  $MSG_T.PARAM_TYP=#VALUE
+  $MSG_T.TYP=#QUIT
+
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+  ;------------------DIALOGANFRAGE----------------
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.MODUL[]=" "
+  $MSG_T.KEY[]="DEMO: DIALOG + %1"
+  $MSG_T.PARAM[]="PARAM"
+  $MSG_T.RELEASE=FALSE
+  $MSG_T.PARAM_TYP=#KEY
+  $MSG_T.TYP=#DIALOG
+  $MSG_T.DLG_FORMAT[]="A|B|C"
+
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+  ANSWER=$MSG_T.ANSWER
+
+  ;------------------HINWEISMELDUNG------------------
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.MODUL[]=" "
+  $MSG_T.KEY[]="DEMO: DIALOG ANSWER = %1"
+  OFFSET=0
+  SWRITE($MSG_T.PARAM[],STATE,OFFSET,"%d",ANSWER)
+  $MSG_T.PARAM_TYP=#VALUE
+
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+  ;------------------- SIMULATION-----------------------
+
+  $LOOP_CONT=TRUE
+  WHILE  $LOOP_CONT
+    $LOOP_MSG[]="S|HALLO ich die SIMULATION eines Schleifenabbruchs!"
+    ; S| erzeugt die Simuliere-Taste !!!!!
+  ENDWHILE
+  $LOOP_MSG[]="                                                 "
+END

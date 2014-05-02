@@ -1,0 +1,200 @@
+&ACCESS  RP
+&COMMENT Laser measurement system
+DEF  PERCEPT (CMD :IN,PARA1 :IN,PARA2 :IN,PARA3 :IN,PARA4 :IN,STATUS :OUT )
+  INT CMD,PARA1,PARA2,PARA3,PARA4,STATUS
+  ;---------------------------------------------------------------------------
+  ; Macro to call the perceptron protokoll via I/O-image.
+  ; Imagebits use: OUT 545 - 592, IN 545 - 704
+  ; 
+  ; Lindemann KUKA RE_SG  11.01.97 Design
+  ; Lindemann KUKA RE_S32 05.03.97 Redesign. Reliationfunction, partner as parameter,
+  ;                                alarmbits available for user
+  ; Lindemann KUKA RE_S32 14.11.97 X,Y,Z: -99.999 - +99.999
+  ; Wiest     KUKA RE_S12 04.05.98  cmd=5: start measurement for singel point measurement
+  ;                                       para1: pointnr      
+  ;                                cmd=6: start measurement point
+  ;                                cmd=7: end measurement cycle
+  ; Wiest KUKA RE_S12 13.07.98     cmd=8: send current wrist angles
+  ; Lindemann KUKA R12-S4 15.10.98 wait until state of valid bit= FALSE
+  ;---------------------------------------------------------------------------
+  INT MEAS[3]
+  INT I,P,S
+  POS POSITION
+
+  ; PERCEPTRON-OUTWORD 1 (545-560) parameters
+  SIGNAL PERCEMODEL $OUT[545]  TO $OUT[550]
+  SIGNAL PERCEPARTNER $OUT[551]  TO $OUT[558] ;also zoneletter
+  ; PERCETRON-OUTWORD 2 (561-576) parameters
+  SIGNAL PERCECOLOR $OUT[561]  TO $OUT[576] ;also pointnr
+  ; PERCETRON-OUTWORD 3 (577-592) command, parameters
+  SIGNAL PERCEPHASE $OUT[577]  TO $OUT[580] ; also relationnumber
+  SIGNAL PERCEFIXTURE $OUT[581]  TO $OUT[587]
+  SIGNAL PERCECMD $OUT[588]  TO $OUT[591]
+  SIGNAL PERCEROLLP $OUT[593]  TO $OUT[608]
+  SIGNAL PERCEROLLS $OUT[609]  TO $OUT[624]
+  SIGNAL PERCEPITCHP $OUT[625]  TO $OUT[640]
+  SIGNAL PERCEPITCHS $OUT[641]  TO $OUT[656]
+  SIGNAL PERCEYAWP $OUT[657]  TO $OUT[672]
+  SIGNAL PERCEYAWS $OUT[673]  TO $OUT[688]
+
+  ; PERCE-INWORDS 1-6  measurement data, alarmbits, relation data
+  SIGNAL PERCE_DATA1 $IN[545]  TO $IN[576] ; x, relation
+  SIGNAL PERCE_DATA2 $IN[577]  TO $IN[608] ; y,
+  SIGNAL PERCE_DATA3 $IN[609]  TO $IN[640] ; z,
+  SIGNAL PERCE_DATA4 $IN[641]  TO $IN[656] ; a, alarm32
+  SIGNAL PERCE_DATA5 $IN[657]  TO $IN[672] ; b, alarm33
+  SIGNAL PERCE_DATA6 $IN[673]  TO $IN[688] ; c, alarm34
+  ; PERCE-INWORD 7 status+validbit
+  SIGNAL PERCESTAT $IN[689]  TO $IN[703]
+
+  ;--- ENTRY -----
+  ; command- and parambits not valid
+  $OUT[592]=FALSE
+  PERCECMD=CMD
+
+  SWITCH  CMD
+  CASE 1,2 ;start measurement, wait foer measurement end
+    PERCEMODEL=PARA1
+    PERCEPARTNER=PARA2
+    PERCECOLOR=PARA3
+    PERCEPHASE=PARA4
+    ; wait until ready bit is false
+    WAIT FOR  $IN[704]==FALSE
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+    ; wait for perceptron function is ready
+    WAIT FOR  $IN[704]
+
+
+    STATUS=PERCESTAT
+    PERCEPT_32=PERCE_DATA4
+    PERCEPT_33=PERCE_DATA5
+    PERCEPT_34=PERCE_DATA6
+
+  CASE 3 ; get measurement data
+    PERCEMODEL=PARA1
+    PERCEFIXTURE=PARA2
+    ; wait until ready bit is false
+    WAIT FOR  $IN[704]==FALSE
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+    ; wait for perceptron function is ready
+    WAIT FOR  $IN[704]
+
+    STATUS=PERCESTAT
+
+    ; expand angel measurement data to 32 bits
+    MEAS[1]=PERCE_DATA4
+    MEAS[2]=PERCE_DATA5
+    MEAS[3]=PERCE_DATA6
+
+    FOR I=1 TO  3
+      IF MEAS[I]>'H7FFF' THEN
+        MEAS[I]=MEAS[I]+'HFFFF0000'
+      ENDIF
+    ENDFOR
+
+    PERCEPT_KOR.X=PERCE_DATA1/1000.0
+    PERCEPT_KOR.Y=PERCE_DATA2/1000.0
+    PERCEPT_KOR.Z=PERCE_DATA3/1000.0
+    PERCEPT_KOR.C=MEAS[1]/1000.0
+    PERCEPT_KOR.B=MEAS[2]/1000.0
+    PERCEPT_KOR.A=MEAS[3]/1000.0
+
+
+  CASE 4 ; get relation data
+    PERCEMODEL=PARA1
+    PERCEPARTNER=PARA2
+    PERCEPHASE=PARA3
+    ; wait until ready bit is false
+    WAIT FOR  $IN[704]==FALSE
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+    ; wait for perceptron function is ready
+    WAIT FOR  $IN[704]
+
+    STATUS=PERCESTAT
+
+    ; change INT to REAL
+    PERCEPT_REL=PERCE_DATA1/1000.0
+
+  CASE 5 ;start measurement for singel point measurement
+    PERCEMODEL=PARA1
+    PERCEPARTNER=PARA2
+    PERCECOLOR=PARA3
+    PERCEPHASE=PARA4
+    ; wait until ready bit is false
+    WAIT FOR  $IN[704]==FALSE
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+    ; wait for perceptron function is ready
+    WAIT FOR  $IN[704]
+
+    STATUS=PERCESTAT
+
+  CASE 6 ;start measurement point
+    PERCECOLOR=PARA1
+    ; wait until ready bit is false
+    WAIT FOR  $IN[704]==FALSE
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+    ; wait for perceptron function is ready
+    WAIT FOR  $IN[704]
+    STATUS=PERCESTAT
+
+  CASE 7 ;end measurement cycle
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+    ;same behaviour as model measurement complete
+    PERCEPT (2,0,0,0,0,STATUS )
+
+  CASE 8 ;send current wrist angles
+    ;actual tool frame
+    POSITION=$POS_ACT
+
+    ;changing zyx-Euler-angles into rpy-angles
+
+    SPLITDEC (POSITION.C,P,S )
+    PERCEROLLP=P
+    PERCEROLLS=S
+
+    SPLITDEC (POSITION.B,P,S )
+    PERCEPITCHP=P
+    PERCEPITCHS=S
+
+    SPLITDEC (POSITION.A,P,S )
+    PERCEYAWP=P
+    PERCEYAWS=S
+
+    ; command- and parambits valid (start perceptron function)
+    $OUT[592]=TRUE
+
+  CASE 9 ; only for developer (undocumented testcommand)
+    PERCEMODEL=PARA1
+    $OUT[592]=TRUE
+    WAIT FOR  $IN[656]
+    STATUS=PERCESTAT
+
+  DEFAULT
+    STATUS=1000
+  ENDSWITCH
+
+END
+
+;split VAL in two parts: P pre decimal point, S sub decimal point
+DEF  SPLITDEC (VAL :IN,P :OUT,S :OUT )
+  REAL VAL,X
+  INT P,S
+
+  ;-x = -x+360
+  IF VAL<0 THEN
+    X=VAL+360.0
+  ELSE
+    X=VAL
+  ENDIF
+
+  ;rounding
+  P=X-0.5
+  ;accuracy is 3 decimals
+  S=(X-P)*1000
+END

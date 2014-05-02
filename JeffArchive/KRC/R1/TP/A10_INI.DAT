@@ -1,0 +1,99 @@
+&ACCESS R
+&REL 1
+&COMMENT ARC_TECH INITIALIZING
+DEFDAT  A10_INI PUBLIC
+;FOLD Options
+BOOL OVR_CTRL=TRUE
+;ENDFOLD (Options)
+;FOLD Signal Declarations Allen Bradley
+;------------------------------------
+; Signal declaration Allen Bradley OE4
+; command in A10_INI.SRC
+;-------------------------------------
+SIGNAL AB_OE4_1 $OUT[785]  TO $OUT[788]
+SIGNAL AB_OE4_2 $OUT[801]  TO $OUT[804]
+;ENDFOLD (Signal Declarations Allen Bradley)
+;FOLD Internal States
+DECL INT START_COND[3]
+START_COND[1]=44
+START_COND[2]=1026
+START_COND[3]=1026
+
+DECL INT WELD_COND[3]
+WELD_COND[1]=16
+WELD_COND[2]=1026
+WELD_COND[3]=1026
+
+DECL INT END_COND[3]
+END_COND[1]=44
+END_COND[2]=1026
+END_COND[3]=1026
+
+DECL BOOL START_STS[3]
+START_STS[1]=TRUE
+START_STS[2]=FALSE
+START_STS[3]=FALSE
+
+DECL BOOL W_COND_STS[3]
+W_COND_STS[1]=TRUE
+W_COND_STS[2]=FALSE
+W_COND_STS[3]=FALSE
+
+DECL BOOL END_STS[3]
+END_STS[1]=FALSE
+END_STS[2]=FALSE
+END_STS[3]=FALSE
+
+INT COND_SIZE=1
+INT START_SIZE=1
+INT END_SIZE=1
+
+INT ANSWER
+;ENDFOLD (Internal States)
+;FOLD ARC Messages
+DECL MSG_T EMPTY_MSG={VALID FALSE,RELEASE FALSE,TYP #NOTIFY,MODUL[] " ",KEY[] " ",PARAM_TYP #VALUE,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of wrong adjustments in BACKWARD.INI: SET_TO_FALSE=TRUE and RESTORE=AT_FWD necessary
+;--------------------------------------------------------------------------------------------
+DECL MSG_T WRONG_BWD={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "BackwardIniCfg",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of wrong $RED_T1_OV_CP option
+;-------------------------------------------------------------------------------
+DECL MSG_T RED_T1_OV_CP={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "ChangeRedT1ovCPtoFalseInCUSTOM",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of PROC_ENABLE=FALSE
+;-----------------------------------------------------------------------------
+DECL MSG_T NO_PROC_ENB={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "NoProcessEnable",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;Check activity of ARC-TECH A20
+;-----------------------------------------------------------------------------
+DECL MSG_T INV_ARC_TECH={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "WrongARCTECH",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of wrong configuration of controller lines: A_ANA_MAX,A_ANA_DEF[]
+;-----------------------------------------------------------------------------
+DECL MSG_T FLT_CTL_LIN={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "FaultControllerLine",PARAM_TYP #KEY,PARAM[] "controller line",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of wrong SUBMIT
+;-----------------------------------------------------------------------------
+DECL MSG_T MISS_SUB={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "MissingSubmit",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of wrong SSDV8_MODE (A_BB_CHANNEL)
+;-----------------------------------------------------------------------------
+DECL MSG_T WRONG_PAR={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "WrongParameter",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of  wrong configuration of  variables like A_ANOUT_NO[n]
+;------------------------------------------------------------------------------
+DECL MSG_T WRONG_ANA={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "MaxAnalogChannel",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+;in case of non 100 percent override on program reset or new program selection 
+;------------------------------------------------------------------------------
+DECL MSG_T CHECK_HUNDRED={VALID FALSE,RELEASE FALSE,TYP #DIALOG,MODUL[] "A10",KEY[] "NonHundredPercentOverride",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] "Yes|No",ANSWER 0}
+
+;-------------------
+;  ONL_OPT  messages
+;-------------------
+
+DECL MSG_T ONL_CYCANOUT={VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "A10",KEY[] "OnlOptNoCycANOUTS",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+
+ENDDAT

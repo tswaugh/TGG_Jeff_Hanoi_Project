@@ -1,0 +1,44 @@
+&ACCESS RVO
+&REL 24
+&PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
+&PARAM EDITMASK = *
+DEFDAT  SOLVE_HANOI
+DECL INT Dummy=1
+DECL INT I=7
+DECL INT HANOI_DISK_COUNT=3
+; Calculate REQUIRED_MOVES = 2^HANOI_DISK_COUNT - 1 (does KRL have exponents?)
+DECL INT REQUIRED_MOVES=7
+DECL INT MOVE_ARRAY[7,2]
+
+; Following are placeholders 
+; Info about the disk in
+DECL REAL DISK_THICKNESS=38.0999985
+DECL REAL DISK_PICKUP_OFFSET=-19.1000004
+
+; Pick-up zone X offset
+DECL REAL PICK_UP_X_OFFSET=-1000.0
+
+; Transit zone Y offset (currently 16" + 100mm)
+DECL REAL TRANSIT_ZONE_Y_OFFSET=500.0
+
+; Table coordinates for front left corner (rel to world coords)
+DECL REAL TABLE_X=2000.0
+DECL REAL TABLE_Y=1006.0
+DECL REAL TABLE_Z=914.400024
+
+; Towers from left to right
+; Coordinate info for starting tower base relative to the table front left corner
+DECL REAL TOWER_ONE_X=400.0
+DECL REAL TOWER_ONE_Y=-381.0
+DECL REAL TOWER_ONE_Z=0.0
+
+; Coordinate info for goal tower base relative to the table front left corner
+DECL REAL TOWER_TWO_X=400.0
+DECL REAL TOWER_TWO_Y=-1006.0
+DECL REAL TOWER_TWO_Z=0.0
+
+; Coordinate info for goal tower base relative to the table front left corner
+DECL REAL TOWER_THREE_X=400.0
+DECL REAL TOWER_THREE_Y=-1631.0
+DECL REAL TOWER_THREE_Z=0.0
+ENDDAT

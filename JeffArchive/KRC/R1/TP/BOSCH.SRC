@@ -1,0 +1,23 @@
+&ACCESS  R
+&COMMENT Spot weld controller 
+DEF  BOSCH (CMD :IN,PAR :IN,STATUS :OUT)
+  INT CMD,PAR,STATUS
+  ; 
+  ; Function to call the boschdriver via I/O-image
+  ; KUKA  26.02.98
+  ; 
+  ; set command- and parambits to not valid
+  $OUT[BOSCHCMD_OK]=FALSE
+  ; write parameters to I/O
+  BOSCHPAR=PAR
+  BOSCHCMD=CMD
+  ; wait until ready bit is false
+  WAIT FOR  $IN[BOSCHSTAT_OK]==FALSE
+  ; set command- and parambits valid
+  $OUT[BOSCHCMD_OK]=TRUE
+  ; wait for bosch device is ready
+  WAIT FOR  $IN[BOSCHSTAT_OK]
+  ; read BOSCH status from I/O system
+  STATUS=BOSCHSTAT B_AND 'HFF'
+END
+

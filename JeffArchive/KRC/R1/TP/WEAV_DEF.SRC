@@ -1,0 +1,357 @@
+&ACCESS  R
+&COMMENT Definition Weave Pattern
+DEF  WEAV_DEF (GENERATOR :IN,FIGUR :IN,FG_NR1 :IN,FG_NR2 :IN,FG_NR3 :IN )
+  ;==================================
+  ; Function : Definition of figurs 
+  ; for mechanical/thermal weaving           
+  ; Package:  A10 / A20
+  ; DATE: 20.03.97
+  ;==================================
+  DECL A_FG_TYPE GENERATOR
+  DECL INT FIGUR,FG_NR1,FG_NR2,FG_NR3
+
+  IF GENERATOR==#FG_MECHANIC THEN
+
+    SWITCH  FIGUR
+
+    CASE 1 ;Dreieck
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=4
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.25
+        $TECH[FG_NR1].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR1].FCT.CPS1.X3=0.75
+        $TECH[FG_NR1].FCT.CPS1.Y3=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y4=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.0
+      ENDIF
+
+    CASE 2 ;Doppeldreieck
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=6
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.125
+        $TECH[FG_NR1].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR1].FCT.CPS1.X3=0.375
+        $TECH[FG_NR1].FCT.CPS1.Y3=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=0.625
+        $TECH[FG_NR1].FCT.CPS1.Y4=1.0
+        $TECH[FG_NR1].FCT.CPS1.X5=0.875
+        $TECH[FG_NR1].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X6=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y6=0.0
+
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.0
+      ENDIF
+
+    CASE 3 ;trapecoid
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=7
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.166666
+        $TECH[FG_NR1].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR1].FCT.CPS1.X3=0.333333
+        $TECH[FG_NR1].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=0.5
+        $TECH[FG_NR1].FCT.CPS1.Y4=0.0
+        $TECH[FG_NR1].FCT.CPS1.X5=0.666666
+        $TECH[FG_NR1].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X6=0.833333
+        $TECH[FG_NR1].FCT.CPS1.Y6=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X7=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y7=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.0
+      ENDIF
+
+    CASE 4 ;double trapecoid
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=10
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.083333
+        $TECH[FG_NR1].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR1].FCT.CPS1.X3=0.166667
+        $TECH[FG_NR1].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=0.333333
+        $TECH[FG_NR1].FCT.CPS1.Y4=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X5=0.416667
+        $TECH[FG_NR1].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X6=0.583333
+        $TECH[FG_NR1].FCT.CPS1.Y6=1.0
+        $TECH[FG_NR1].FCT.CPS1.X7=0.666667
+        $TECH[FG_NR1].FCT.CPS1.Y7=1.0
+        $TECH[FG_NR1].FCT.CPS1.X8=0.833333
+        $TECH[FG_NR1].FCT.CPS1.Y8=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X9=0.916667
+        $TECH[FG_NR1].FCT.CPS1.Y9=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X10=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y10=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.0
+      ENDIF
+
+    CASE 5 ; unsymetrical trapecoid
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=6
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.1
+        $TECH[FG_NR1].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR1].FCT.CPS1.X3=0.3
+        $TECH[FG_NR1].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=0.5
+        $TECH[FG_NR1].FCT.CPS1.Y4=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X5=0.9
+        $TECH[FG_NR1].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X6=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y6=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.0
+      ENDIF
+
+    CASE 6 ;spiral
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=6
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.166666
+        $TECH[FG_NR1].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR1].FCT.CPS1.X3=0.333333
+        $TECH[FG_NR1].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=0.666666
+        $TECH[FG_NR1].FCT.CPS1.Y4=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X5=0.833333
+        $TECH[FG_NR1].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X6=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y6=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=6
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=-1.0
+        $TECH[FG_NR2].FCT.CPS1.X2=0.083333
+        $TECH[FG_NR2].FCT.CPS1.Y2=-1.0
+        $TECH[FG_NR2].FCT.CPS1.X3=0.416666
+        $TECH[FG_NR2].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR2].FCT.CPS1.X4=0.58
+        $TECH[FG_NR2].FCT.CPS1.Y4=1.0
+        $TECH[FG_NR2].FCT.CPS1.X5=0.916666
+        $TECH[FG_NR2].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR2].FCT.CPS1.X6=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y6=-1.0
+      ENDIF
+
+    CASE 7 ;eight
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=9
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=0.125
+        $TECH[FG_NR1].FCT.CPS1.Y2=0.5
+        $TECH[FG_NR1].FCT.CPS1.X3=0.25
+        $TECH[FG_NR1].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR1].FCT.CPS1.X4=0.375
+        $TECH[FG_NR1].FCT.CPS1.Y4=0.5
+        $TECH[FG_NR1].FCT.CPS1.X5=0.5
+        $TECH[FG_NR1].FCT.CPS1.Y5=0
+        $TECH[FG_NR1].FCT.CPS1.X6=0.625
+        $TECH[FG_NR1].FCT.CPS1.Y6=-0.5
+        $TECH[FG_NR1].FCT.CPS1.X7=0.75
+        $TECH[FG_NR1].FCT.CPS1.Y7=-1.0
+        $TECH[FG_NR1].FCT.CPS1.X8=0.875
+        $TECH[FG_NR1].FCT.CPS1.Y8=-0.5
+        $TECH[FG_NR1].FCT.CPS1.X9=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y9=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=9
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=0.125
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.5
+        $TECH[FG_NR2].FCT.CPS1.X3=0.25
+        $TECH[FG_NR2].FCT.CPS1.Y3=0.0
+        $TECH[FG_NR2].FCT.CPS1.X4=0.375
+        $TECH[FG_NR2].FCT.CPS1.Y4=-0.5
+        $TECH[FG_NR2].FCT.CPS1.X5=0.5
+        $TECH[FG_NR2].FCT.CPS1.Y5=0
+        $TECH[FG_NR2].FCT.CPS1.X6=0.625
+        $TECH[FG_NR2].FCT.CPS1.Y6=0.5
+        $TECH[FG_NR2].FCT.CPS1.X7=0.75
+        $TECH[FG_NR2].FCT.CPS1.Y7=0.0
+        $TECH[FG_NR2].FCT.CPS1.X8=0.875
+        $TECH[FG_NR2].FCT.CPS1.Y8=-0.5
+        $TECH[FG_NR2].FCT.CPS1.X9=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y9=0.0
+      ENDIF
+
+    CASE 8,9 ;default as minimums UsrDef1 and UsrDef2
+
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=2
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.1
+        $TECH[FG_NR1].FCT.CPS1.X2=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y2=-0.1
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.1
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=-0.1
+      ENDIF
+
+    DEFAULT
+      IF FG_NR1>0 THEN
+        $TECH[FG_NR1].FCT.ORDER=1
+        $TECH[FG_NR1].FCT.CPNUM=2
+        $TECH[FG_NR1].FCT.CPS1.X1=0.0
+        $TECH[FG_NR1].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR1].FCT.CPS1.X2=1.0
+        $TECH[FG_NR1].FCT.CPS1.Y2=0.0
+      ENDIF
+      IF FG_NR2>0 THEN
+        $TECH[FG_NR2].FCT.ORDER=1
+        $TECH[FG_NR2].FCT.CPNUM=2
+        $TECH[FG_NR2].FCT.CPS1.X1=0.0
+        $TECH[FG_NR2].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR2].FCT.CPS1.X2=1.0
+        $TECH[FG_NR2].FCT.CPS1.Y2=0.0
+      ENDIF
+    ENDSWITCH
+
+    IF FG_NR1>0 THEN
+      A_LST_M1_FIG=FIGUR
+    ELSE
+      A_LST_M1_FIG=0
+    ENDIF
+    IF FG_NR2>0 THEN
+      A_LST_M2_FIG=FIGUR
+    ELSE
+      A_LST_M2_FIG=0
+    ENDIF
+
+  ENDIF
+
+  ; set up thermical weaving
+  IF GENERATOR==#FG_THERMAL THEN
+    SWITCH  FIGUR
+
+    CASE 1 ; triangel
+
+      IF FG_NR3>0 THEN
+        $TECH[FG_NR3].FCT.ORDER=1
+        $TECH[FG_NR3].FCT.CPNUM=4
+        $TECH[FG_NR3].FCT.CPS1.X1=0.0
+        $TECH[FG_NR3].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR3].FCT.CPS1.X2=0.25
+        $TECH[FG_NR3].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR3].FCT.CPS1.X3=0.75
+        $TECH[FG_NR3].FCT.CPS1.Y3=-1.0
+        $TECH[FG_NR3].FCT.CPS1.X4=1.0
+        $TECH[FG_NR3].FCT.CPS1.Y4=0.0
+      ENDIF
+
+    CASE 2 ; trapecoid
+
+      IF FG_NR3>0 THEN
+
+        $TECH[FG_NR3].FCT.ORDER=1
+        $TECH[FG_NR3].FCT.CPNUM=7
+        $TECH[FG_NR3].FCT.CPS1.X1=0.0
+        $TECH[FG_NR3].FCT.CPS1.Y1=0.0
+        $TECH[FG_NR3].FCT.CPS1.X2=0.166666
+        $TECH[FG_NR3].FCT.CPS1.Y2=1.0
+        $TECH[FG_NR3].FCT.CPS1.X3=0.333333
+        $TECH[FG_NR3].FCT.CPS1.Y3=1.0
+        $TECH[FG_NR3].FCT.CPS1.X4=0.5
+        $TECH[FG_NR3].FCT.CPS1.Y4=0.0
+        $TECH[FG_NR3].FCT.CPS1.X5=0.666666
+        $TECH[FG_NR3].FCT.CPS1.Y5=-1.0
+        $TECH[FG_NR3].FCT.CPS1.X6=0.833333
+        $TECH[FG_NR3].FCT.CPS1.Y6=-1.0
+        $TECH[FG_NR3].FCT.CPS1.X7=1.0
+        $TECH[FG_NR3].FCT.CPS1.Y7=0.0
+
+      ENDIF
+
+
+    CASE 3,4 ;UsrDef1 and UsrDef2
+      IF FG_NR3>0 THEN
+        $TECH[FG_NR3].FCT.ORDER=1
+        $TECH[FG_NR3].FCT.CPNUM=2
+        $TECH[FG_NR3].FCT.CPS1.X1=0.0
+        $TECH[FG_NR3].FCT.CPS1.Y1=0.1
+        $TECH[FG_NR3].FCT.CPS1.X2=1.0
+        $TECH[FG_NR3].FCT.CPS1.Y2=-0.1
+      ENDIF
+
+    DEFAULT
+      IF FG_NR3>0 THEN
+        $TECH[FG_NR3].FCT.ORDER=1
+        $TECH[FG_NR3].FCT.CPNUM=2
+        $TECH[FG_NR3].FCT.CPS1.X1=0.0
+        $TECH[FG_NR3].FCT.CPS1.Y1=0.001
+        $TECH[FG_NR3].FCT.CPS1.X2=1.0
+        $TECH[FG_NR3].FCT.CPS1.Y2=-0.001
+      ENDIF
+    ENDSWITCH
+    IF FG_NR3>0 THEN
+      A_LST_TH_FIG=FIGUR
+    ELSE
+      A_LST_TH_FIG=0
+    ENDIF
+
+  ENDIF
+
+END
+

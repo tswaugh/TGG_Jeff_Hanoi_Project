@@ -1,0 +1,892 @@
+&ACCESS  R
+&COMMENT HANDLING package
+DEF  H50 (INSTR :IN,G_NO :IN,S_NO :IN,PARA :IN )
+  ;==================================
+  ; FUNCTION : standard routines
+  ; Package:  H50
+  ; V3.2.0
+  ;==================================
+
+  INT INSTR,MODE
+  DECL GRP_TYP PARA
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL FERTIG,ST1,ST2,ST3
+  DECL INT ANSWER
+  DECL INT OFFSET
+  DECL STATE_T STATE
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  IF G_NO>MAXGRIPPER THEN
+    GPRNOEXIST (G_NO )
+    RETURN
+  ENDIF
+
+  SWITCH  GRIPPER[G_NO].TYPE
+  CASE 1,2,3,4,5
+    SWITCH  INSTR
+    CASE 1
+      GRP (G_NO,S_NO,MODE,PARA )
+    CASE 2,4
+      MODE=1
+      CHK_UP (G_NO,S_NO,MODE )
+    CASE 3
+      GRP_UP (G_NO,S_NO )
+    CASE 5
+      GRP_MANUAL (G_NO,S_NO )
+    ENDSWITCH
+  DEFAULT
+    IF (GRIPPER[G_NO].TYPE>99) THEN
+      USER_GRP (INSTR,G_NO,S_NO,PARA )
+    ELSE
+      IF INSTR==5 THEN
+        FALSEGRPTM ( )
+      ELSE
+        FALSEGRPT ( )
+      ENDIF
+    ENDIF
+  ENDSWITCH
+END
+;==================================
+; FUNCTION : executes a gripper check
+; Package:  H50
+;==================================
+DEF  CHK_UP (G_NO :IN,S_NO :IN,MODE :OUT )
+
+  INT G_NO,S_NO,MODE
+
+  SWITCH  GRIPPER[G_NO].TYPE
+  CASE 0
+    GRPNOKONF ( )
+  CASE 1
+    TYP1_CHK (G_NO,S_NO,MODE )
+  CASE 2
+    TYP2_CHK (G_NO,S_NO,MODE )
+  CASE 3
+    TYP3_CHK (G_NO,S_NO,MODE )
+  CASE 4
+    TYP4_CHK (G_NO,S_NO,MODE )
+  CASE 5
+    TYP5_CHK (G_NO,S_NO,MODE )
+  DEFAULT
+    IF (MODE==1) THEN
+      BRAKE
+    ENDIF
+    FALSEGRPT ( )
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : checks up to four
+;   inputs according to type
+;==================================
+DEF  CHK_GRP (NO1,NO2,NO3,NO4,STATE1,STATE2,STATE3,STATE4,MODE )
+
+  INT NO1,NO2,NO3,NO4,NO1_ABS,NO2_ABS,NO3_ABS,NO4_ABS,CNT,ERR_MODE,MODE
+  BOOL STATE1,STATE2,STATE3,STATE4
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  ; get absolut value of input number
+  NO1_ABS=ABS(NO1)
+  NO2_ABS=ABS(NO2)
+  NO3_ABS=ABS(NO3)
+  NO4_ABS=ABS(NO4)
+
+  ; avoid fault message
+  IF NO1_ABS==0 THEN
+    NO1_ABS=1
+  ENDIF
+  IF NO2_ABS==0 THEN
+    NO2_ABS=1
+  ENDIF
+  IF NO3_ABS==0 THEN
+    NO3_ABS=1
+  ENDIF
+  IF NO4_ABS==0 THEN
+    NO4_ABS=1
+  ENDIF
+
+  ; invert STATE if input number is negativ
+  STATE1=STATE1 EXOR (NO1<0)
+  STATE2=STATE2 EXOR (NO2<0)
+  STATE3=STATE3 EXOR (NO3<0)
+  STATE4=STATE4 EXOR (NO4<0)
+
+  ; reset gripper timeout
+  CHK_CODE=0
+
+  SWITCH  MODE
+  CASE 0
+    CNT=0
+
+    $MSG_T=EMPTY_MSG
+    $MSG_T.KEY[]="WaitForGripper"
+    $MSG_T.TYP=#STATE
+    $MSG_T.VALID=TRUE
+    WHILE  ((((STATE1<>$IN[NO1_ABS]) AND (NO1<>0)) OR ((STATE2<>$IN[NO2_ABS]) AND (NO2<>0)) OR ((STATE3<>$IN[NO3_ABS]) AND (NO3<>0)) OR ((STATE4<>$IN[NO4_ABS]) AND (NO4<>0)))) AND (CNT<10*TIME_OUT)
+      WAIT SEC 0.1
+      CNT=CNT+1
+    ENDWHILE
+    $MSG_T.RELEASE=TRUE
+    $LOOP_CONT=FALSE
+    IF (CNT==10*TIME_OUT) THEN
+      CHK_CODE=1
+      CNT=0
+    ENDIF
+
+  CASE 1
+    IF (((STATE1<>$IN[NO1_ABS]) AND (NO1<>0)) OR ((STATE2<>$IN[NO2_ABS]) AND (NO2<>0)) OR ((STATE3<>$IN[NO3_ABS]) AND (NO3<>0)) OR ((STATE4<>$IN[NO4_ABS]) AND (NO4<>0))) THEN
+      BRAKE
+      CHK_CODE=1
+    ENDIF
+
+  DEFAULT
+  ENDSWITCH
+
+  IF (CHK_CODE==1) THEN
+    R_LOOP_MSG ( )
+    WAIT SEC 0.2
+    $LOOP_CONT=TRUE
+    $LOOP_MSG[]="s|Gripper TimeOut"
+    WHILE  ((((STATE1<>$IN[NO1_ABS]) AND (NO1<>0)) OR ((STATE2<>$IN[NO2_ABS]) AND (NO2<>0)) OR ((STATE3<>$IN[NO3_ABS]) AND (NO3<>0)) OR ((STATE4<>$IN[NO4_ABS]) AND (NO4<>0)))) AND $LOOP_CONT
+      WAIT SEC 0.01
+    ENDWHILE
+    R_LOOP_MSG ( )
+    IF  NOT $LOOP_CONT THEN
+      $MSG_T=EMPTY_MSG
+      $MSG_T.KEY[]="InputsAreSimulated"
+      $MSG_T.TYP=#QUIT
+      $MSG_T.VALID=TRUE
+      WHILE  $MSG_T.VALID
+        WAIT SEC 0.05
+      ENDWHILE
+      WAIT SEC 0.2
+    ENDIF
+    CHK_CODE=0
+  ENDIF
+  H50_FERTIG=TRUE
+END
+
+;==================================
+; FUNCTION : checking a gripper
+;    from type 1
+;==================================
+DEF  TYP1_CHK (G_NO :IN,S_NO :IN,MODE :IN )
+
+  INT G_NO,S_NO,MODE
+
+  SWITCH  S_NO
+  CASE 1
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,GRIPPER[G_NO].IN3,GRIPPER[G_NO].IN4,TRUE,FALSE,TRUE,FALSE,MODE )
+
+  CASE 2
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,GRIPPER[G_NO].IN3,GRIPPER[G_NO].IN4,FALSE,TRUE,FALSE,TRUE,MODE )
+
+  DEFAULT
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : checking a gripper
+;    from type 2
+;==================================
+DEF  TYP2_CHK (G_NO :IN,S_NO :IN,MODE :IN )
+
+  INT G_NO,S_NO,MODE
+
+  SWITCH  S_NO
+  CASE 1
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,TRUE,FALSE,FALSE,FALSE,MODE )
+
+  CASE 2
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,FALSE,TRUE,FALSE,FALSE,MODE )
+
+  CASE 3
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,FALSE,FALSE,FALSE,FALSE,MODE )
+
+  DEFAULT
+
+  ENDSWITCH
+
+END
+;==================================
+; FUNCTION : checking a gripper
+;    from type 3
+;==================================
+DEF  TYP3_CHK (G_NO :IN,S_NO :IN,MODE :IN )
+
+  INT G_NO,S_NO,MODE
+
+  SWITCH  S_NO
+  CASE 1
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,TRUE,FALSE,FALSE,FALSE,MODE )
+
+  CASE 2
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,FALSE,TRUE,FALSE,FALSE,MODE )
+
+  CASE 3
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,FALSE,FALSE,FALSE,FALSE,MODE )
+
+  DEFAULT
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : checking a gripper
+;    from type 4
+;==================================
+DEF  TYP4_CHK (G_NO :IN,S_NO :IN,MODE :IN )
+
+  INT G_NO,S_NO,MODE
+
+  SWITCH  S_NO
+  CASE 1
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,TRUE,FALSE,FALSE,FALSE,MODE )
+
+  CASE 2
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,FALSE,TRUE,FALSE,FALSE,MODE )
+
+  CASE 3
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,0,0,FALSE,FALSE,FALSE,FALSE,MODE )
+
+  DEFAULT
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : checking a gripper
+;    from type 5
+;==================================
+DEF  TYP5_CHK (G_NO :IN,S_NO :IN,MODE :IN )
+
+  INT G_NO,S_NO,MODE
+
+  SWITCH  S_NO
+  CASE 1
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,GRIPPER[G_NO].IN3,GRIPPER[G_NO].IN4,TRUE,FALSE,TRUE,FALSE,MODE )
+
+  CASE 2
+    CHK_GRP (GRIPPER[G_NO].IN1,GRIPPER[G_NO].IN2,GRIPPER[G_NO].IN3,GRIPPER[G_NO].IN4,FALSE,TRUE,FALSE,TRUE,MODE )
+
+  DEFAULT
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : switch gripper
+; Package:  H50
+;==================================
+DEF  GRP_UP (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  ; select defined gripper type
+  SWITCH  GRIPPER[G_NO].TYPE
+  CASE 0
+    GRPNOKONF ( )
+  CASE 1
+    TYP1_PRG (G_NO,S_NO )
+  CASE 2
+    TYP2_PRG (G_NO,S_NO )
+  CASE 3
+    TYP3_PRG (G_NO,S_NO )
+  CASE 4
+    TYP4_PRG (G_NO,S_NO )
+  CASE 5
+    TYP5_PRG (G_NO,S_NO )
+  DEFAULT
+    FALSEGRPT ( )
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : set output with NO to
+;   state, respect a zero (deactivatet)
+;   or negativ (inverted) setting
+;   of NO
+;==================================
+DEF  SET_OUT (NO,STATE,STATIC )
+
+  INT NO,NO_ABS
+  BOOL STATE,STATIC,MARK
+
+  ; action only if NO is not zero
+  IF NO<>0 THEN
+
+    ; get positiv input number
+    NO_ABS=ABS(NO)
+
+    ; invert state if NO is negativ
+    MARK=(STATE==(NO>0))
+
+    IF STATIC THEN
+      $OUT[NO_ABS]=MARK
+    ELSE
+      PULSE ($OUT[NO_ABS],MARK,GRP_PULSE_TI )
+    ENDIF
+
+  ENDIF
+END
+
+;==================================
+; FUNCTION : setting up a gripper
+;    from type 1
+;==================================
+DEF  TYP1_PRG (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  CASE 2
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+
+  DEFAULT
+    FALSEGRPST ( )
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : setting up a gripper
+;    from type 2
+;==================================
+DEF  TYP2_PRG (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  CASE 2
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+
+  CASE 3
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  DEFAULT
+    FALSEGRPST ( )
+
+  ENDSWITCH
+
+END
+;==================================
+; FUNCTION : setting up a gripper
+;    from type 3
+;==================================
+DEF  TYP3_PRG (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  CASE 2
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+
+  CASE 3
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  DEFAULT
+    FALSEGRPST ( )
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : setting up a gripper
+;    from type 4
+;==================================
+DEF  TYP4_PRG (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT3,FALSE,TRUE )
+  CASE 2
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT3,TRUE,TRUE )
+  CASE 3
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+    SET_OUT (GRIPPER[G_NO].OUT3,FALSE,TRUE )
+
+  DEFAULT
+    FALSEGRPST ( )
+
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : setting up a gripper
+;    from type 5
+;==================================
+DEF  TYP5_PRG (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT (GRIPPER[G_NO].OUT1,TRUE,FALSE )
+    SET_OUT (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+    GRIPPER[G_NO].GRP_OLD=S_NO
+
+  CASE 2
+    SET_OUT (GRIPPER[G_NO].OUT2,TRUE,FALSE )
+    SET_OUT (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    GRIPPER[G_NO].GRP_OLD=S_NO
+
+  DEFAULT
+    FALSEGRPST ( )
+
+  ENDSWITCH
+END
+
+;==================================
+; FUNCTION : Switch gripper
+;   according to defined type,
+;   execute the defined wait time
+;   and check inputs if selected
+;==================================
+DEF  GRP (G_NO :IN,S_NO :IN,MODE :OUT, PARA :IN )
+  DECL GRP_TYP PARA
+  INT G_NO,S_NO,MODE
+
+  GRP_UP (G_NO,S_NO )
+
+  SWITCH  PARA.CTRL
+
+  CASE #OFF
+    ; execute waiting if there is a positiv waiting time
+    IF (PARA.TIME>0) THEN
+      WAIT SEC PARA.TIME
+    ENDIF
+
+  CASE #ON
+    ;check gripper
+    MODE=0
+    CHK_UP (G_NO,S_NO,MODE )
+
+  DEFAULT
+  ENDSWITCH
+
+END
+
+;==================================
+; FUNCTION : executes a gripper by pushbutton
+;
+;==================================
+DEF  GRP_MANUAL (G_NO :IN,S_NO :IN )
+
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL ST1,ST2,ST3
+
+  IF  NOT ($PRO_ACT) THEN
+
+    ; get absolut value of outputs
+    GET_OUT (O1_ABS,O2_ABS,O3_ABS,ST1,ST2,ST3,G_NO )
+
+    ; select program according to defined type
+    SWITCH  GRIPPER[G_NO].TYPE
+    CASE 0
+      GRPNOKONF ( )
+    CASE 1
+      TYP1_PRG_M (G_NO,S_NO,ST1,ST2,ST3,O1_ABS,O2_ABS,O3_ABS )
+    CASE 2
+      TYP2_PRG_M (G_NO,S_NO,ST1,ST2,ST3,O1_ABS,O2_ABS,O3_ABS )
+    CASE 3
+      TYP3_PRG_M (G_NO,S_NO,ST1,ST2,ST3,O1_ABS,O2_ABS,O3_ABS )
+    CASE 4
+      TYP4_PRG_M (G_NO,S_NO,ST1,ST2,ST3,O1_ABS,O2_ABS,O3_ABS )
+    CASE 5
+      TYP5_PRG_M (G_NO,S_NO,ST1,ST2,ST3,O1_ABS,O2_ABS,O3_ABS )
+
+    DEFAULT
+      FALSEGRPTM ( )
+
+    ENDSWITCH
+  ENDIF
+END
+;==================================
+; FUNCTION : Set output with number
+;   NO to STATE , no action if
+;   output number is zero, invert
+;   state if output number is
+;   negativ
+;==================================
+DEF  SET_OUT_M (NO :OUT,STATE,STATIC )
+
+  INT NO,NO_ABS
+  BOOL STATE,STATIC
+
+  IF NO<>0 THEN
+    NO_ABS=ABS(NO)
+    IF STATIC THEN
+      $OUT[NO_ABS]=(STATE==(NO>0))
+    ELSE
+      PULSE ($OUT[NO_ABS],(STATE==(NO>0)),GRP_PULSE_TI )
+    ENDIF ; STATIC
+  ENDIF ; NO<>0
+
+END
+;-------------------------------------------------------------
+DEF  GET_OUT (O1_ABS :OUT,O2_ABS :OUT,O3_ABS :OUT,ST1 :OUT,ST2 :OUT,ST3 :OUT,G_NO )
+
+  INT O1_ABS,O2_ABS,O3_ABS,G_NO
+  BOOL ST1,ST2,ST3
+
+  ; get absolut number of outputs
+  O1_ABS=ABS(GRIPPER[G_NO].OUT1)
+  O2_ABS=ABS(GRIPPER[G_NO].OUT2)
+  O3_ABS=ABS(GRIPPER[G_NO].OUT3)
+
+  ; get state of outputs
+  ST1=FALSE
+  ST2=FALSE
+  ST3=FALSE
+
+  IF GRIPPER[G_NO].OUT1<>0 THEN
+    ST1=$OUT[O1_ABS] EXOR (GRIPPER[G_NO].OUT1<0)
+  ENDIF
+  IF GRIPPER[G_NO].OUT2<>0 THEN
+    ST2=$OUT[O2_ABS] EXOR (GRIPPER[G_NO].OUT2<0)
+  ENDIF
+  IF GRIPPER[G_NO].OUT3<>0 THEN
+    ST3=$OUT[O3_ABS] EXOR (GRIPPER[G_NO].OUT3<0)
+  ENDIF
+
+END
+;---------------------------------------------------------------------------------------------
+DEF  TYP1_PRG_M (G_NO :IN,S_NO :OUT,ST1 :IN,ST2 :IN,ST3 :IN,O1_ABS :IN,O2_ABS :IN,O3_ABS :IN )
+
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL ST1,ST2,ST3
+
+  S_NO=1
+
+  IF ST2 OR ((O2_ABS==0) AND ( NOT (ST1))) THEN
+    S_NO=2
+  ENDIF
+
+  S_NO=S_NO+1
+  IF S_NO>2 THEN
+    S_NO=1
+  ENDIF
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT_M (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+
+  CASE 2
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+
+
+  DEFAULT
+    FALSEGRPSTM ( )
+
+  ENDSWITCH
+
+END
+;---------------------------------------------------------------------------------------------
+DEF  TYP2_PRG_M (G_NO :IN,S_NO :OUT,ST1 :IN,ST2 :IN,ST3 :IN,O1_ABS :IN,O2_ABS :IN,O3_ABS :IN )
+
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL ST1,ST2,ST3
+
+  S_NO=1
+  IF ST2 OR ((O2_ABS==0) AND ( NOT (ST1))) THEN
+    S_NO=2
+  ENDIF
+  IF  NOT (ST1) AND  NOT (ST2) AND (O1_ABS<>0) AND (O2_ABS<>0) THEN
+    S_NO=3
+  ENDIF
+
+  S_NO=S_NO+1
+  IF S_NO>3 THEN
+    S_NO=1
+  ENDIF
+
+  IF ((O1_ABS==0) OR (O2_ABS==0)) AND (S_NO>=3) THEN
+    S_NO=1
+  ENDIF
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT_M (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  CASE 2
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+
+  CASE 3
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  DEFAULT
+    FALSEGRPSTM ( )
+
+  ENDSWITCH
+
+END
+;---------------------------------------------------------------------------------------------
+DEF  TYP3_PRG_M (G_NO :IN,S_NO :OUT,ST1 :IN,ST2 :IN,ST3 :IN,O1_ABS :IN,O2_ABS :IN,O3_ABS :IN )
+
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL ST1,ST2,ST3
+
+  S_NO=1
+  IF ST2 OR ((O2_ABS==0) AND ( NOT (ST1))) THEN
+    S_NO=2
+  ENDIF
+  IF  NOT (ST1) AND  NOT (ST2) AND (O1_ABS<>0) AND (O2_ABS<>0) THEN
+    S_NO=3
+  ENDIF
+
+  S_NO=S_NO+1
+  IF S_NO>3 THEN
+    S_NO=1
+  ENDIF
+
+  IF ((O1_ABS==0) OR (O2_ABS==0)) AND (S_NO>=3) THEN
+    S_NO=1
+  ENDIF
+
+  SWITCH  S_NO
+  CASE 1
+    SET_OUT_M (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  CASE 2
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+
+  CASE 3
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  DEFAULT
+    FALSEGRPSTM ( )
+
+  ENDSWITCH
+
+END
+;---------------------------------------------------------------------------------------------
+DEF  TYP4_PRG_M (G_NO :IN,S_NO :OUT,ST1 :IN,ST2 :IN,ST3 :IN,O1_ABS :IN,O2_ABS :IN,O3_ABS :IN )
+
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL ST1,ST2,ST3
+
+  S_NO=1
+
+  IF ST2 OR ST3 OR ( NOT (ST1) AND (O1_ABS<>0)) THEN
+    S_NO=2
+  ENDIF
+
+  IF ( NOT (ST1) OR (O1_ABS==0)) AND (ST2 OR (O2_ABS==0)) AND  NOT (ST3) AND (O3_ABS<>0) THEN
+    S_NO=3
+  ENDIF
+
+  S_NO=S_NO+1
+  IF S_NO>3 THEN
+    S_NO=1
+  ENDIF
+
+  IF (S_NO>=3) AND (O3_ABS==0) THEN
+    S_NO=1
+  ENDIF
+
+  IF (O1_ABS==0) AND (O2_ABS==0) AND  NOT (ST3) THEN
+    S_NO=2
+  ENDIF
+
+  SWITCH  S_NO
+
+  CASE 1
+    SET_OUT_M (GRIPPER[G_NO].OUT1,TRUE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT3,FALSE,TRUE )
+  CASE 2
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT3,TRUE,TRUE )
+  CASE 3
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,TRUE,TRUE )
+    SET_OUT_M (GRIPPER[G_NO].OUT3,FALSE,TRUE )
+  DEFAULT
+    FALSEGRPSTM ( )
+
+  ENDSWITCH
+END
+;---------------------------------------------------------------------------------------------
+DEF  TYP5_PRG_M (G_NO :IN,S_NO :OUT,ST1 :IN,ST2 :IN,ST3 :IN,O1_ABS :IN,O2_ABS :IN,O3_ABS :IN )
+
+  INT G_NO,S_NO,O1_ABS,O2_ABS,O3_ABS
+  BOOL ST1,ST2,ST3
+
+  S_NO=GRIPPER[G_NO].GRP_OLD+1
+  GRIPPER[G_NO].GRP_OLD=S_NO
+
+  IF S_NO>2 THEN
+    S_NO=1
+    GRIPPER[G_NO].GRP_OLD=S_NO
+  ENDIF
+
+  SWITCH  S_NO
+
+  CASE 1
+    SET_OUT_M (GRIPPER[G_NO].OUT1,TRUE,FALSE )
+    SET_OUT_M (GRIPPER[G_NO].OUT2,FALSE,TRUE )
+
+  CASE 2
+    SET_OUT_M (GRIPPER[G_NO].OUT2,TRUE,FALSE )
+    SET_OUT_M (GRIPPER[G_NO].OUT1,FALSE,TRUE )
+
+
+  DEFAULT
+    FALSEGRPSTM ( )
+
+  ENDSWITCH
+
+END
+;------------------
+DEF  R_LOOP_MSG ( )
+
+  $LOOP_MSG[]="                                                            "
+
+END
+
+;**********************
+;Error message
+;**********************
+DEF  GRPNOKONF ( )
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.KEY[]="GripperNoConfigurated"
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+END
+
+;**********************
+;Error message
+;**********************
+DEF  FALSEGRPT ( )
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.KEY[]="TypeOfGripperIsWrong"
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+END
+
+;**********************
+;Error message
+;**********************
+DEF  FALSEGRPTM ( )
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.KEY[]="TypeOfGripperIsWrong"
+  $MSG_T.VALID=TRUE
+
+END
+
+;**********************
+;Error message
+;**********************
+DEF  FALSEGRPST ( )
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.KEY[]="StatusOfGripperIsWrong"
+  $MSG_T.VALID=TRUE
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+END
+
+;**********************
+;Error message
+;**********************
+DEF  FALSEGRPSTM ( )
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.KEY[]="StatusOfGripperIsWrong"
+  $MSG_T.VALID=TRUE
+
+END
+
+;**********************
+;Error message
+;**********************
+DEF  GPRNOEXIST (G_NO :IN )
+  INT G_NO
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPGRP",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  $MSG_T.KEY[]="GripperNoExist"
+  $MSG_T.VALID=TRUE
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.05
+  ENDWHILE
+  WAIT SEC 0.2
+
+END
+

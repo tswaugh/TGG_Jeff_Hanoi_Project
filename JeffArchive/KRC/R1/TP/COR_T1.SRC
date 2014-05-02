@@ -1,0 +1,162 @@
+&ACCESS  RVP
+&COMMENT Tool Correction program
+DEF  COR_T1 ( )
+  ;********************************
+  ; Function: Correction of Tool
+  ;********************************
+  ;FOLD INIT
+  BOOL STOP_BY_REF
+  REAL NEW_WZK[3],OLD_WZK[3],DIST_WZK[3]
+  EXT  BAS (BAS_COMMAND  :IN,REAL  :IN )
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TOOLCOR",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  WHILE  $MODE_OP<>#T1
+    MESS (5,1 )
+  ENDWHILE
+  INTERRUPT DECL 1 WHEN FLAG DO INTER_1 ( )
+  INTERRUPT  ON 1
+  BAS (#INITMOV,0 )
+  $TOOL=$NULLFRAME
+  $BASE=$NULLFRAME
+  STOP_BY_REF=TRUE ;FALSE-correctionmode,TRUE-teachmode
+  COR_TOOL_NO=1 ;toolnumber
+  CHK_T_NO ( )
+  ;ENDFOLD
+  PTP  XHOME
+  ;movement to REF_PT
+  PTP  !
+  ;FOLD GO_REF()
+  TRIGGER WHEN DISTANCE=1 DELAY=-0.01 DO FLAG=TRUE
+  GO_REF (STOP_BY_REF )
+  ;ENDFOLD
+  ;movement to XHOME
+  PTP  !
+  PTP  XHOME
+END
+
+DEF  GO_REF (STP_FR_REF :IN )
+  BOOL STP_FR_REF
+
+  $TOOL=TOOL_DATA[COR_TOOL_NO]
+  BAS (#VEL_CP,0.01 )
+  IF STP_FR_REF THEN
+    MESS (7,2 )
+  ENDIF
+  LIN  REF_PT[COR_TOOL_NO]
+  BAS (#VEL_CP,2 )
+  $TOOL=$NULLFRAME
+  HALT
+END
+;FOLD SUBROUTINES
+
+DEF  INTER_1 ( )
+  FLAG=FALSE
+  BRAKE
+  MESS (3,2 )
+  W_CRASH ( )
+  RESUME
+END
+
+DEF  W_CRASH ( )
+  ;********************************
+  ;* Tooldata-Check after Crash   *
+  ;********************************
+  REAL T[4,4]
+  REAL NEW_WZK[3],OLD_WZK[3],DIST_WZK[3]
+  FRAME REF_POINT,OLD_BASE,OLD_TOOL
+  INT I
+
+  OLD_TOOL=$TOOL
+  OLD_BASE=$BASE
+  $TOOL=$NULLFRAME
+  $BASE=$POS_ACT
+  $BASE.X=REF_PT[COR_TOOL_NO].X
+  $BASE.Y=REF_PT[COR_TOOL_NO].Y
+  $BASE.Z=REF_PT[COR_TOOL_NO].Z
+  NEW_WZK[1]=-$POS_ACT.X
+  NEW_WZK[2]=-$POS_ACT.Y
+  NEW_WZK[3]=-$POS_ACT.Z
+  $TOOL=OLD_TOOL
+  $BASE=OLD_BASE
+  OLD_WZK[1]=TOOL_DATA[COR_TOOL_NO].X
+  OLD_WZK[2]=TOOL_DATA[COR_TOOL_NO].Y
+  OLD_WZK[3]=TOOL_DATA[COR_TOOL_NO].Z
+  FOR I=1 TO  3
+    DIST_WZK[I]=NEW_WZK[I]-OLD_WZK[I]
+  ENDFOR
+  IF (VEK_LAENGE(DIST_WZK[],3)<0.1) THEN
+    MESS (4,1 )
+  ELSE
+    IF (VEK_LAENGE(DIST_WZK[],3)>MAX_CRASH) THEN
+      MESS (1,1 )
+    ELSE
+      MESS (2,1 )
+      TOOL_DATA[COR_TOOL_NO].X=NEW_WZK[1]
+      TOOL_DATA[COR_TOOL_NO].Y=NEW_WZK[2]
+      TOOL_DATA[COR_TOOL_NO].Z=NEW_WZK[3]
+    ENDIF
+  ENDIF
+END
+
+DEFFCT  REAL VEK_LAENGE(V[],N :IN)
+  REAL V[]
+  INT N
+  RETURN  (SQRT(SKAL_PROD(V[],V[],N)))
+ENDFCT
+
+DEFFCT  REAL SKAL_PROD(V[],W[],N :IN)
+  REAL V[],W[]
+  INT N,I
+  REAL SK_PROD
+  SK_PROD=0
+  FOR I=1 TO  N
+    SK_PROD=SK_PROD+V[I]*W[I]
+  ENDFOR
+  RETURN  (SK_PROD)
+ENDFCT
+
+DEF  MESS (MESS_NR,OPT ) ;============
+  ;Error message 
+  ;=====================================
+  INT MESS_NR,OPT
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TOOLCOR",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  $MSG_T=EMPTY_MSG
+  SWITCH  MESS_NR
+  CASE 1
+    $MSG_T.KEY[]="ToBigDifferenceInToolData"
+  CASE 2
+    $MSG_T.KEY[]="DifferenceInToleranceArea"
+  CASE 3
+    $MSG_T.KEY[]="CheckDifferenceToolToRefpoint"
+  CASE 4
+    $MSG_T.KEY[]="NoDifference"
+  CASE 5
+    $MSG_T.KEY[]="OnlyInT1ModeAllowed"
+  CASE 6
+    $MSG_T.KEY[]="InvalidToolNumber"
+  CASE 7
+    $MSG_T.KEY[]="TouchupRefPT"
+  DEFAULT
+    $MSG_T.KEY[]="MessageNumberIsWrong"
+  ENDSWITCH
+  SWITCH  OPT
+  CASE 1
+    $MSG_T.VALID=TRUE
+    WHILE  $MSG_T.VALID
+      WAIT SEC 0.05
+    ENDWHILE
+    WAIT SEC 0.2
+  CASE 2
+    $MSG_T.VALID=TRUE
+    HALT
+  DEFAULT
+  ENDSWITCH
+  $MSG_T=EMPTY_MSG
+END
+DEF  CHK_T_NO ( )
+  WHILE  ((COR_TOOL_NO<1) OR (COR_TOOL_NO>MAX_TOOL))
+    MESS (6,2 )
+  ENDWHILE
+END
+;ENDFOLD

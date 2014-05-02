@@ -1,0 +1,2531 @@
+&ACCESS RO
+&REL 1
+&COMMENT ARC-TECH A10 MAIN PROGRAMM
+&PARAM KUKATPARCTECHANALOG_VERSION = 1.0.0
+DEF  A10 (ARC_CMD :IN,START_SET :IN,WELD_SET :IN,END_SET :IN,APPL_MODE :IN )
+  ;----------------
+  ; Date 04.03.2005  
+  ;----------------
+  INT APPL_MODE
+  DECL A_CMD_T ARC_CMD
+  DECL A_STRT_T START_SET
+  DECL A_WELD_T WELD_SET
+  DECL A_END_T END_SET
+
+  ID[]="CTL"
+
+  SWITCH  ARC_CMD
+
+  CASE #ARC_SEAM
+    A_ARC_INSTR=A_ARC_SEAM
+    WELD_ON_SEAM (ARC_CMD )
+  CASE #GAS_PRE
+    GAS_PRE_FLOW ( )
+  CASE #PRE_ARC_ON
+    S=START_SET
+    ARC_MODE=APPL_MODE
+    PRE_ARC_ON (ARC_MODE,S.GAS_PRE_T,ARC_CMD )
+    A_ARC_INSTR=A_ARC_IDLE
+  CASE #ARC_STRT
+    SAVE_OLD_MOV ( )
+    SAFE_OVR ( )
+    IF (A_S_PARA_ACT.START_T>0.0) THEN
+      ARC_START (A_ARC_ON,ARC_CMD )
+    ENDIF
+  CASE #PRE_ARC_OFF
+    W=WELD_SET
+    E=END_SET
+    ARC_MODE=APPL_MODE
+    IF (A_S_PARA_ACT.START_T>0.0) THEN
+      A_ARC_INSTR=A_ARC_OFF
+    ENDIF
+    PRE_ARC (#PRE_ARC_OFF,ARC_MODE,W )
+  CASE #ARC_OFF
+    TTS_BACKWARD
+    FINISH_SEAM ( )
+    A_ARC_INSTR=A_ARC_IDLE
+  CASE #PRE_ARC_SWI
+    W=WELD_SET
+    ARC_MODE=APPL_MODE
+    PRE_ARC (#PRE_ARC_SWI,ARC_MODE,W )
+  CASE #IR_ERROR
+    IF A_WLD_ACTIV==#ACTIVE THEN
+      IR_STOPM_HOT=TRUE
+      A_SPS_ACTION=#IDLE
+      A_ARC_INSTR=A_TECH_STOP
+      ARC_TECH_STP (ARC_CMD )
+    ELSE
+      IR_STOPM_HOT=FALSE
+      BURNBACK_SUB ( )
+    ENDIF
+  CASE #APPL_ERROR
+    IF SEAM_ERR() THEN
+      IF A_WLD_ACTIV==#ACTIVE THEN
+        A_ARC_INSTR=A_TECH_STOP
+      ENDIF
+      ARC_TECH_STP (ARC_CMD )
+      RESTART_IR (ARC_CMD )
+    ENDIF
+  CASE #I_PRET_STP
+    A_SPS_ACTION=#ACTIVE
+    A_CLD_TSTP=#ACTIVE
+    IF A_WLD_ACTIV==#ACTIVE THEN
+      A50 (#SEN_TSTOP )
+    ENDIF
+    TECH_STP_SUB ( )
+    SET_OUT1 (A_O_IR_STOP,#SET_IO )
+    A_CLD_TSTP=#IDLE
+  CASE #IR_RESTART
+    IF ((IR_STOPM_HOT==TRUE) AND (TECH_MOTION==TRUE)) THEN
+      RESTART_IR (ARC_CMD )
+    ENDIF
+  CASE #HPU_ARC
+    IF (A_HOT_WELD==#ACTIVE) THEN
+      A_ISR4_FLAG=#IDLE
+      INTERRUPT OFF 4 ; avoid Trigger seam control
+    ENDIF
+    SET_OUT1 (A_O_IR_STOP,#RESET_IO )
+    HPU_ON_OFF (ARC_CMD )
+  CASE #CLEAN_OFF
+    SET_BIN_GRP (A_O_DISBL_P[],#ADV_STOP )
+  DEFAULT
+
+  ENDSWITCH
+
+END
+;-----------------------------(ARC-TECH Main)--------------------------
+; Preparing ARC_ON
+;-----------------
+DEF  PRE_ARC_ON (WELD_MODE :IN,GAS_PRE_TIM :IN,ARC_CMD :IN )
+
+  DECL PRO_MODE SAF_PRG_MODE
+  DECL MODE_OP SAFE_MOTION
+  DECL A_CMD_T ARC_CMD
+  REAL GAS_PRE_TIM
+  INT WELD_MODE
+  INT I
+
+  A_SEAM_CTRL=0 ; RESET of Seam control information
+  A_WELD_MEM=#IDLE
+  A_SV_WLD_STS=#IDLE
+  RETRY_COUNT=0
+  ERROR_COUNT=0
+  A_HPU_CMD=#IDLE
+  A_SPS_ACTION=#IDLE
+  A_ACT_W_MODE=WELD_MODE
+
+  IF A_DEF_USRMSG==FALSE THEN
+    ARC_MSG(#DEF_USR_MSG)
+    A_DEF_USRMSG=TRUE   
+  ENDIF
+
+  A_PR_GAS_TIM=(-GAS_PRE_TIM)*1000 ;[sec to msec]
+  A_ARC_SWI=#IDLE ; Trigger for switch to weld parameters
+  A_FIFO_READ=1
+  A_FIFO_WRITE=1
+  A_S_PARA_ACT=S
+  A_COLD_SEAM=#IDLE
+  A_INTR_MODE=#IDLE
+  A_ISR_SELECT=FALSE
+
+  FOR I=1 TO  6
+    DRY_RN_CTL[I]=FALSE
+  ENDFOR
+  FIF_DRY_RN=1
+
+  SPS_RUN ("ARCSPS",6 ) ;A10_Option is #active and submit is running
+  PRE_STRT_PAR (WELD_MODE )
+
+  IF WELD_COND_R1()  THEN
+    CHECK_WELDER ( )
+  ENDIF
+
+  CONTINUE
+  SAF_PRG_MODE=$PRO_MODE1
+  CONTINUE
+  SAFE_MOTION=$MODE_OP
+
+  IF (A_I_EN_W_EXT.NO>0) THEN
+    IF (A_WLD_IN[A_I_EN_W_EXT.NO].IN_NR>0) AND (A_HPU_DRY_RN==#IDLE) THEN
+      IF $MODE_OP<>#EX THEN
+        IF (A_HOT_WELD==#ACTIVE) AND  NOT (GET_INP(A_I_EN_W_EXT,#ADV_CONT)) THEN
+          REPEAT
+            MESS_DLG (KEY_SWITCH ) ; Acknowledge key switch (if configured)
+          UNTIL ((A_HOT_WELD==#IDLE) OR (GET_INP(A_I_EN_W_EXT,#ADV_CONT)))
+        ENDIF
+
+        IF (A_HOT_WELD==#IDLE) AND (GET_INP(A_I_EN_W_EXT,#ADV_CONT) AND ((SAFE_MOTION==#T1) OR (SAFE_MOTION==#T2))) THEN
+          IF GET_INP(A_I_EN_W_EXT,#ADV_CONT) THEN
+            MESS_DLG (KEYS_WELD ) ; Warn message to have another state like A_HOT_WELD
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+
+  WHILE  (A_HOT_WELD==#ACTIVE)  AND (SAF_PRG_MODE<>#GO)
+    MESS_DLG (PRG_MODE ) ;  in case of $PRO_MODE1 <> #GO
+  ENDWHILE
+  
+  IF (A_HOT_WELD==#ACTIVE) AND (PROC_IN_T1==FALSE) AND (SAFE_MOTION==#T1) THEN
+    MESS_DLG (NO_WELD_T1 ) ;  in case of $MODE_OP==#T1
+  ENDIF
+
+  SET_ANOUT (#START_PAR,ARC_CMD ) ;start parameter
+
+  IF (A_ACT_W_MODE==1) THEN
+    SET_BIN_GRP (A_O_MODE1[],#ADV_CONT )
+  ELSE
+    SET_BIN_GRP (A_O_MODE2[],#ADV_CONT )
+  ENDIF
+
+  A_E_PARA_ACT=E
+  PRE_OFF (WELD_MODE )
+  PRE_BRN_FREE (WELD_MODE )
+
+  CONTINUE
+  IF (($MOVE_BCO==TRUE) OR ($ON_PATH==FALSE) OR (TECH_MOTION==TRUE)) THEN
+    A50 (#BLOCK_SELECT )
+    FG_OFF ( )
+    RESTORE_OVR ( )
+    $TECH[A_FG_SENSOR].MODE=#OFF
+    SET_OUT1 (A_O_IR_STOP,#RESET_IO ) ;reset TECHSTOP flag to PLC
+  ENDIF
+
+  SWI_CTRL ( )
+  A_ISR4_FLAG=#IDLE
+  INTERRUPT OFF 4
+  $TECHSYS=#TTS
+
+  IF ((A_S_PARA_ACT.GAS_PRE_T>0) AND (A_PR_GAS_OPT==TRUE)) THEN
+    TRIGGER WHEN DISTANCE=1 DELAY=A_PR_GAS_TIM DO A10 (#GAS_PRE,A_S_PARA_ACT ) PRIO=-1
+  ENDIF
+
+END ;(PRE_ARC_ON)
+;----------------------------
+; ARC_START at ARC_ON/SWI/OFF
+; independant from kind of 
+; start/weld parameter
+;----------------------------
+DEF  ARC_START (CMD :IN,ARC_CMD :IN )
+
+  INT CMD,I
+  DECL A_CMD_T ARC_CMD
+  DECL A_BOOL_T ARC_ON_ERR,CURRENT_FLAG
+  BOOL START_HELP
+  REAL PRE_WIRE_VAL,SAFE_WFD_VAL
+
+  IF CMD==A_ARC_ON THEN
+
+    FOR I=1 TO  6
+      FIF_VELCTRL[I]=FALSE ; FIFO Online Opt CTRL of velocity
+    ENDFOR
+
+    IF $MODE_OP<>#EX THEN
+       A_ARC_INSTR=A_ARC_ON
+    ENDIF
+
+  ELSE
+    SET_OUT1 (A_O_FLT_APPL,#RESET_IO )
+  ENDIF
+
+  IF ($MODE_OP <> #EX) THEN
+     WAIT FOR TRUE
+  ENDIF
+
+  TECH_MOTION=TRUE ; mark of enabling Flying ARC
+
+
+  IF (A_COLD_SEAM==#IDLE) AND (A_HOT_WELD==#ACTIVE) THEN
+
+    IF CMD<>A_ARC_ON THEN
+      A_ISR_SELECT=TRUE
+      IF  NOT ((A_HPU_CMD==#ACTIVE) AND (A_STRT_BRAKE==#IDLE)) THEN
+        BRAKE
+      ENDIF
+    ELSE
+      A_ISR_SELECT=FALSE
+    ENDIF
+
+    IF (A_PRE_WR_OPT==#ACTIVE) THEN
+      IF A_ANAOUT_NO[2]>0 THEN
+        IF (A_FG_THERM==0) THEN
+          SAFE_WFD_VAL=$ANOUT[A_ANAOUT_NO[2]]
+          PRE_WIRE_VAL=SAFE_WFD_VAL*(100-A_PRE_WIRE)/100.0
+          $ANOUT[A_ANAOUT_NO[2]]=PRE_WIRE_VAL
+        ELSE
+          SAFE_WFD_VAL=A_TH2_ACT_O
+          PRE_WIRE_VAL=SAFE_WFD_VAL*(100-A_PRE_WIRE)/100.0
+          A_TH2_ACT_O=PRE_WIRE_VAL
+        ENDIF
+      ENDIF
+    ENDIF
+
+    REPEAT
+
+      RETRY_COUNT=RETRY_COUNT+1
+
+      IF A_GAS_FLOW==#IDLE THEN
+        GAS_PRE_FLOW ( )
+      ENDIF
+
+      $TIMER_STOP[15]=TRUE
+      $TIMER[15]=(-A_CTRL_DELAY) ; [msec]
+
+      IF (WELD_COND_R1() AND (A_GAS_FLOW==#ACTIVE)) THEN
+
+        IF A_ALU_OPTION==#ACTIVE THEN
+          SET_OUT1 (A_O_ALU_STRT,#SET_IO )
+          IF $PRO_MODE<>#BSTEP THEN
+            A_WLD_ACTIV=#ACTIVE
+            A_WELD_MEM=#ACTIVE
+            SET_BIN_GRP (A_O_WLD_STRT[],#ADV_STOP )
+          ENDIF
+
+          WAIT SEC A_ALU_S_TIME
+          SET_BIN_GRP (A_O_SEAM_END[],#ADV_STOP )
+          A_WLD_ACTIV=#IDLE
+          A_WELD_MEM=#IDLE
+          WAIT SEC A_ALU_DELY_T
+          SET_OUT1 (A_O_ALU_STRT,#RESET_IO )
+        ENDIF
+
+        IF $PRO_MODE<>#BSTEP THEN
+          SET_BIN_GRP (A_O_WLD_STRT[],#ADV_STOP )
+          A_WLD_ACTIV=#ACTIVE
+          A_WELD_MEM=#ACTIVE
+        ENDIF
+
+        IF CMD==A_ARC_ON THEN
+          A_ARC_INSTR=A_ARC_ON
+        ENDIF
+
+      ENDIF
+
+      IF WAI_INP(START_COND[],START_STS[],START_SIZE,#ADV_STOP) THEN
+        CURRENT_FLAG=#ACTIVE
+      ELSE
+        CURRENT_FLAG=#IDLE
+      ENDIF
+
+      IF (A_PRE_WR_OPT==#ACTIVE) THEN
+        IF ((CURRENT_FLAG==#ACTIVE) AND (A_HOT_WELD==#ACTIVE) AND (A_ANAOUT_NO[2]>0)) THEN
+          IF A_FG_THERM==0 THEN
+            $ANOUT[A_ANAOUT_NO[2]]=SAFE_WFD_VAL
+          ELSE
+            A_TH2_ACT_O=SAFE_WFD_VAL
+          ENDIF
+        ENDIF
+      ENDIF
+
+      IF ((CURRENT_FLAG==#IDLE) AND (A_WLD_ACTIV==#ACTIVE) AND (A_HOT_WELD==#ACTIVE) AND ($PRO_MODE <> #BSTEP)) THEN
+
+        ARC_ON_ERR=#ACTIVE
+        SET_OUT1 (A_O_FLT_STRT,#SET_IO )
+        SET_BIN_GRP (A_O_SEAM_END[],#ADV_STOP )
+        SET_BIN_GRP (A_O_POST_OFF[],#FINAL_STS )
+        SET_BIN_GRP (A_O_FLT_ON[],#ADV_STOP )
+        SET_OUT1 (A_O_FLT_SIGN,#SET_IO )
+
+        A_WLD_ACTIV=#IDLE
+        A_GAS_FLOW=#IDLE
+        A_WELD_MEM=#IDLE
+
+        IF A_S_ERR_OPT==#USR_START THEN
+
+          IF (RETRY_COUNT<MAX_RETRY) THEN
+            MSG_START ( ) ;State message with number of retry
+          ENDIF
+
+          WAIT SEC 1.0
+          TMP_STRT_POS=$POS_ACT
+          FLT_SERV (A_WLD_ACTIV,ARC_ON_ERR ) ; User defined START error handling
+
+          IF RETRY_COUNT>=MAX_RETRY THEN
+            MESS_DLG (LIM_RESTART ) ;Too many retrys 
+            RETRY_COUNT=0
+            $MSG_T.RELEASE=TRUE
+            WAIT SEC 0.15
+          ENDIF
+
+          LIN  TMP_STRT_POS
+
+        ELSE
+
+          IF RETRY_COUNT<MAX_RETRY THEN
+
+            $MSG_T=NO_CURRENT ; No current established
+            WAIT SEC 0.15
+            $MSG_T.VALID=TRUE
+            WAIT SEC 1.5
+            $MSG_T.RELEASE=TRUE
+
+            WHILE  $MSG_T.VALID
+              WAIT SEC 0.15
+            ENDWHILE
+
+            WAIT SEC 0.3
+            $MSG_T=EMPTY_MSG
+
+          ENDIF
+
+          IF RETRY_COUNT>=MAX_RETRY THEN
+            MESS_DLG (LIM_RESTART ) ;Too many retrys 
+            RETRY_COUNT=0
+            $MSG_T.RELEASE=TRUE
+            WAIT SEC 0.15
+          ENDIF
+
+        ENDIF
+
+        SET_OUT1 (A_O_FLT_SIGN,#RESET_IO )
+        SET_BIN_GRP (A_O_ACK_FLT[],#STOP_PULS ) ; Acknowledge weld fault
+        SET_OUT1 (A_O_FLT_STRT,#RESET_IO )
+        ARC_ON_ERR=#IDLE
+
+      ENDIF
+
+      START_HELP=((RETRY_COUNT>MAX_RETRY) OR (A_COLD_SEAM==#ACTIVE) OR (A_HOT_WELD==#IDLE) OR ($PRO_MODE==#BSTEP))
+
+    UNTIL ((START_HELP) OR (GET_INP(A_I_EN_W_EXT,#ADV_CONT)==FALSE) OR (A_WLD_ACTIV==#ACTIVE) OR ((ARC_CMD==#IR_ERROR) AND ($STOPMESS==TRUE)))
+
+    IF (A_S_PARA_ACT.START_T>0.024) AND (A_HOT_WELD==#ACTIVE) THEN
+      WAIT SEC (A_S_PARA_ACT.START_T-0.024)
+    ENDIF
+
+    $TIMER_STOP[15]=FALSE
+    IF A_WLD_ACTIV==#ACTIVE THEN
+      INTERRUPT ON 4
+      A_ISR4_FLAG=#ACTIVE
+    ENDIF
+
+  ENDIF
+
+  RETRY_COUNT=0
+
+END ;(ARC_START)
+;------------------------
+; advance part of ARC_CMD
+;------------------------
+DEF  PRE_ARC (CMD :IN,WELD_MODE :IN,W :IN )
+
+  DECL A_WELD_T W
+  DECL A_CMD_T CMD
+  INT WELD_MODE
+
+  A_INTR_MODE=#IDLE
+  A_HPU_CMD=#IDLE
+  A_SV_WLD_STS=#IDLE
+  
+  IF A_S_PARA_ACT.START_T > 0.0 THEN
+    TECH_MOTION=TRUE
+  ENDIF
+
+  $APO.CDIS=A_AP_DIS_TCH
+  SAFE_OVR ( )
+
+  IF (A_FIFO_WRITE>A_FIFO_MAX) THEN
+    A_FIFO_WRITE=1
+  ENDIF
+
+  A_FIFO_WLD_P[A_FIFO_WRITE]=W
+  A_FIF_A_MODE[A_FIFO_WRITE]=WELD_MODE
+  PRE_SWI_PAR (WELD_MODE )
+  A50 (#SENS_ADV_DEF,W.VEL,W.WEAVAMP_MECH,W.WEAVLEN_MECH,W.WEAVFIG_MECH )
+
+  IF PS_TEMP_SET.STS==#IDLE THEN
+
+    IF ((A_FG_MECH1>0) OR (A_FG_MECH2>0) OR (A_FG_THERM>0)) THEN
+      $TECHANGLE.A=0.0
+      $TECHANGLE.B=0.0
+      SET_MECH_WEAVE_ANGLE (W.WEAVANG_MECH)
+      IF (W.WEAVFIG_MECH<>A_LST_M1_FIG) OR (W.WEAVFIG_MECH<>A_LST_M2_FIG) THEN
+        WEAV_DEF (#FG_MECHANIC,W.WEAVFIG_MECH,A_FG_MECH1,A_FG_MECH2,A_FG_THERM )
+      ENDIF
+    ENDIF
+
+    IF ((W.WEAVFIG_THER<>A_LST_TH_FIG) AND (A_FG_THERM>0) AND (A50_OPTION==#DISABLED)) THEN
+      WEAV_DEF (#FG_THERMAL,W.WEAVFIG_THER,A_FG_MECH1,A_FG_MECH2,A_FG_THERM )
+    ENDIF
+
+    IF ((A_FG_THERM>0) AND ((A_S_PARA_ACT.START_T>0.0) OR (A_FIFO_WRITE>1))) THEN
+      IF ((W.WEAVLEN_THER>0.0) AND (W.WEAVFIG_THER>0) AND (A50_OPTION==#DISABLED)) THEN
+        $TECH[A_FG_THERM].FCTCTRL.SCALE_IN=W.WEAVLEN_THER
+        $TECH[A_FG_THERM].MODE=#CYCLE
+      ELSE
+        $TECH[A_FG_THERM].MODE=#OFF
+      ENDIF
+    ENDIF
+
+    IF (A_S_PARA_ACT.START_T>0.0) OR (A_FIFO_WRITE>1) THEN
+      FG_MECH_ON ( )
+    ENDIF
+
+  ELSE
+    FG_OFF ( )
+  ENDIF
+
+  IF ((A_S_PARA_ACT.START_T>0.0) OR (A_FIFO_WRITE>1)) AND (A50_OPTION==#ACTIVE) THEN
+    A50 (#PRE_SENS )
+  ENDIF
+
+  IF A_HPU_DRY_RN==#ACTIVE THEN
+    PRE_DRY_RUN ( )
+    FIF_VELCTRL[A_FIFO_WRITE]=FALSE
+    DRY_RN_CTL[A_FIFO_WRITE]=TRUE
+  ELSE
+    IF $EDIT_MODE==2 THEN
+      $VEL.CP=(W.VEL/30.0) ; OV_PRO=50 / m/min --> m/sec
+      FIF_VELCTRL[A_FIFO_WRITE]=TRUE
+    ELSE
+      FIF_VELCTRL[A_FIFO_WRITE]=FALSE
+      IF SAVE_OVR>0 THEN
+        $VEL.CP=(W.VEL*1.6667/SAVE_OVR) ; take care of override <> 100
+      ELSE
+        $VEL.CP=(W.VEL*0.01667) ; 100 per cent 
+      ENDIF
+    ENDIF
+
+    DRY_RN_CTL[A_FIFO_WRITE]=FALSE
+  ENDIF
+
+  IF CMD==#PRE_ARC_OFF THEN
+    A_E_PARA_ACT=E
+    PRE_OFF (WELD_MODE ) ; calculate E_EK_data / E_BB_data
+  ENDIF
+
+  IF $MOVE_BCO==TRUE THEN
+
+    A50 (#BLOCK_SELECT )
+    SET_OUT1 (A_O_IR_STOP,#RESET_IO )
+
+    IF CMD<>#PRE_ARC_OFF THEN
+      A_FIFO_WRITE=1
+      A_FIFO_READ=1
+      PRE_SWI_PAR (WELD_MODE )
+      IF A_HOT_SELECT==#IDLE THEN
+        A_COLD_SEAM=#ACTIVE
+      ENDIF
+    ELSE
+      A_COLD_SEAM=#ACTIVE
+    ENDIF
+
+    IF ($EDIT_MODE==2) THEN
+      FIF_VELCTRL[A_FIFO_WRITE]=TRUE
+    ENDIF
+
+    FG_OFF ( )
+    $TECH[A_FG_SENSOR].MODE=#OFF
+
+  ELSE
+    A_FIFO_WRITE=A_FIFO_WRITE+1
+    INTERRUPT ON 7 ;condition: A_ARC_SWI==#ACTIVE --> WELD_ON_SEAM
+    TRIGGER WHEN DISTANCE=0 DELAY=0 DO A_ARC_SWI=#ACTIVE ;Trigger ISR7:WELD_ON_SEAM( )
+  ENDIF
+
+END ;(PRE_ARC)
+;----------------------------
+; Interrupt subroutine ISR 7
+; called from  ARC_OFF_PRE( )
+; called from ARC_PRE( )
+;----------------------------
+DEF  WELD_ON_SEAM (ARC_CMD :IN )
+
+  DECL A_CMD_T ARC_CMD
+  BOOL ON_PROCESS
+
+  ON_PROC_OVER=TRUE
+  TECH_MOTION=TRUE ;Enable mark Fly ARC
+
+  INTERRUPT OFF 7 ; own ISR-SUBROUTINE:WELD_ON_SEAM
+
+  IF ((A_S_PARA_ACT.START_T==0.0) AND (A_FIFO_READ==1) AND (A_WLD_ACTIV==#IDLE) AND ($MOVE_BCO==FALSE)) THEN
+    BRAKE
+  ENDIF
+
+  IF (($EDIT_MODE==2) AND (FIF_VELCTRL[A_FIFO_READ]==TRUE)) THEN
+    $OV_PRO=50
+  ENDIF
+
+  RETRY_COUNT=0
+  A_W_PARA_ACT=A_FIFO_WLD_P[A_FIFO_READ]
+  A50 (#SEN_FIFO_ACT )
+  IF (((A_W_PARA_ACT.WEAVLEN_MECH==0.0) OR (A_W_PARA_ACT.WEAVAMP_MECH==0.0)) AND (A_W_PARA_ACT.WEAVFIG_MECH>0) AND (A_HPU_DRY_RN==#IDLE)) THEN
+    BRAKE
+    TECH_STP_SUB ( )
+    MESS_DLG (NO_WEAVE_POSSIBLE)
+  ENDIF
+
+
+  FIF_DRY_RN=A_FIFO_READ
+
+  IF (A_ACT_W_MODE <> A_FIF_A_MODE[A_FIFO_READ] ) THEN
+    IF (A_FIF_A_MODE[A_FIFO_READ]==1) THEN
+      SET_BIN_GRP (A_O_MODE1[],#ADV_CONT )
+    ELSE
+      SET_BIN_GRP (A_O_MODE2[],#ADV_CONT )
+    ENDIF
+  ENDIF
+
+  A_ACT_W_MODE=A_FIF_A_MODE[A_FIFO_READ]
+  SET_ANOUT (#FIFO_W_PAR,ARC_CMD )
+  A_FIFO_READ=A_FIFO_READ+1
+  IF (A_FIFO_READ>A_FIFO_MAX) THEN
+    A_FIFO_READ=1
+  ENDIF
+
+  IF ((A_WLD_ACTIV==#IDLE) AND (A_HOT_WELD==#ACTIVE)) THEN
+    IF ((A_HOT_SELECT==#IDLE) AND (A_S_PARA_ACT.START_T>0.0)) THEN ; necessary for start time=0
+      A_COLD_SEAM=#ACTIVE
+    ELSE
+      REPEAT
+        IF A_WLD_ACTIV==#IDLE THEN
+          IF ((A_HOT_WELD==#ACTIVE) AND (GET_INP(A_I_EN_W_EXT,#ADV_CONT)) AND (A_COLD_SEAM==#IDLE)) THEN
+            A_GAS_FLOW=#IDLE
+            BRAKE
+            I_ARC_ON (ARC_CMD )
+            ON_PROC_OVER=FALSE
+          ELSE
+            I_FG_MECH_ON ( )
+            I_FG_THRM_ON ( )
+          ENDIF
+        ENDIF
+      UNTIL ((A_WLD_ACTIV==#ACTIVE) OR (A_COLD_SEAM==#ACTIVE) OR (A_HOT_WELD==#IDLE) OR  NOT (GET_INP(A_I_EN_W_EXT,#ADV_CONT)) OR ($PRO_MODE==#BSTEP))
+    ENDIF
+  ELSE
+
+    IF SEN_PARA_ACT.STS==#IDLE THEN
+      I_FG_MECH_ON ( )
+      I_FG_THRM_ON ( )
+    ENDIF
+
+  ENDIF
+
+  IF SEN_PARA_ACT.STS==#ACTIVE THEN
+    A50 (#SYNC )
+    I_FG_OFF ( )
+  ENDIF
+
+  A_ARC_SWI=#IDLE ; new signal edge for interrupt
+  INTERRUPT ON 7
+
+END ;(WELD_ON_SEAM)
+;-----------------------------------
+; Subroutine after reaching SEAM_END
+;-----------------------------------
+DEF  FINISH_SEAM ( )
+
+  INT BURN_FREE,I
+
+  FOR I=1 TO  3
+    A_O_POST_OFF[I].PULS_TIME=A_E_PARA_ACT.GAS_POST_T + 0.010; Post Flow time
+    A_O_POST_ON[I].PULS_TIME=A_E_PARA_ACT.BURNBACK_T+A_E_PARA_ACT.END_TI+A_E_PR_GAS_T ; 
+  ENDFOR
+
+  WAIT FOR TRUE 
+
+  IF (A_WLD_ACTIV==#ACTIVE) THEN
+    SET_BIN_GRP (A_O_POST_ON[],#FINAL_STS )
+  ENDIF
+
+  A50 (#SENSOR_OFF )
+  FG_OFF ( )
+
+  IF (A_E_PARA_ACT.END_TI>0.0) THEN
+    SET_ANOUT (#EK_PAR )
+    IF A_HOT_WELD==#ACTIVE THEN
+      WAIT SEC (A_E_PARA_ACT.END_TI)
+    ENDIF
+  ENDIF
+
+  INTERRUPT OFF 4
+  A_ISR4_FLAG=#IDLE
+
+  IF A_BB_MODE==#REDUCE THEN
+    BB_REDUCE ( )
+  ENDIF
+
+  IF ((A_HOT_WELD==#ACTIVE) AND (A_WLD_ACTIV==#ACTIVE)) THEN
+    IF A_BB_MODE==#SSDV8_MODE THEN
+      SET_BIN_GRP (A_O_SEAM_END[],#ADV_STOP )
+      A_WLD_ACTIV=#IDLE
+      IF (A_E_PARA_ACT.BURNBACK_T>0.0) AND (HIDE_BB_TIME==FALSE) AND (A_WLD_IN[7].IN_NR == 0) THEN
+        WAIT SEC A_E_PARA_ACT.BURNBACK_T
+      ELSE
+        IF ((A_WLD_IN[7].IN_NR > 0) AND (A_E_PARA_ACT.BURNBACK_T<0.1)) THEN
+          WAIT SEC 0.15  
+        ELSE
+          WAIT SEC A_E_PARA_ACT.BURNBACK_T    
+        ENDIF  
+      ENDIF
+    ELSE
+      SET_BIN_GRP (A_O_SEAM_END[],#ADV_STOP )
+      A_WLD_ACTIV=#IDLE
+      IF (A_E_PARA_ACT.BURNBACK_T>0.0) AND (HIDE_BB_TIME==FALSE) AND (A_WLD_IN[7].IN_NR == 0) THEN
+        WAIT SEC A_E_PARA_ACT.BURNBACK_T
+      ELSE
+        IF ((A_WLD_IN[7].IN_NR > 0) AND (A_E_PARA_ACT.BURNBACK_T<0.1)) THEN
+          WAIT SEC 0.1
+        ELSE
+          WAIT SEC A_E_PARA_ACT.BURNBACK_T
+        ENDIF
+      ENDIF
+    ENDIF
+
+    A_ARC_INSTR=A_SEAM_RDY
+
+    SET_BIN_GRP (A_O_POST_OFF[],#FINAL_STS )
+    A_GAS_FLOW=#IDLE
+
+    IF ( NOT (WAI_INP(END_COND[],END_STS[],END_SIZE,#ADV_STOP)) AND (A_HOT_WELD==#ACTIVE)) THEN
+      SET_OUT1 (A_O_FLT_SIGN,#SET_IO )
+      MESS_DLG (NO_WELD_END )
+      SET_OUT1 (A_O_FLT_SIGN,#RESET_IO )
+      SET_BIN_GRP (A_O_ACK_FLT[],#STOP_PULS )
+    ENDIF
+
+  ENDIF
+
+  $TIMER_STOP[16]=TRUE
+  $TIMER[16]=(A_E_PARA_ACT.GAS_POST_T)*(-1000)
+  $TIMER_STOP[16]=FALSE
+
+  IF A_HOT_WELD==#ACTIVE THEN
+    IF A_BRN_FR_OPT==#ACTIVE THEN
+
+      BURN_FREE=0
+
+      REPEAT
+
+        BURN_FREE=BURN_FREE+1
+
+        IF  NOT (GET_INP(A_I_BRN_FREE,#ADV_CONT)) AND ($PRO_MODE<>#BSTEP) THEN
+          SET_ANOUT (#BRN_FREE_PAR ) ;burn free parameter
+
+          IF (WELD_COND_R1() AND ($PRO_MODE<>#BSTEP )) THEN
+
+            IF (BURN_FREE < A_BRN_FR_LIM) THEN
+              MESS_DLG (BURN_OFF )
+            ENDIF
+
+            SET_BIN_GRP (A_O_POST_ON[],#ADV_STOP )
+
+            IF (WELD_COND_R1() AND ($PRO_MODE<>#BSTEP)) THEN
+              SET_BIN_GRP (A_O_WLD_STRT[],#ADV_STOP )
+              A_WLD_ACTIV=#ACTIVE
+            ENDIF
+
+            WAIT SEC A_BRN_FREE_T
+            SET_BIN_GRP (A_O_SEAM_END[],#ADV_STOP )
+            A_WLD_ACTIV=#IDLE
+
+            IF (WELD_COND_R1() AND ($PRO_MODE<>#BSTEP )) THEN
+              SET_BIN_GRP (A_O_POST_OFF[],#FINAL_STS )
+              A_GAS_FLOW=#IDLE
+            ENDIF
+
+            IF (WAI_INP(END_COND[],END_STS[],END_SIZE,#ADV_STOP) AND (A_HOT_WELD==#ACTIVE)) THEN
+              WAIT SEC A_BRN_FREE_T
+            ENDIF
+
+          ENDIF
+        ENDIF
+
+      UNTIL (GET_INP(A_I_BRN_FREE,#ADV_CONT) OR (BURN_FREE>= A_BRN_FR_LIM))
+
+      IF ( NOT (GET_INP(A_I_BRN_FREE,#ADV_CONT)) AND (BURN_FREE>= A_BRN_FR_LIM)) THEN
+        MESS_DLG (LIMIT_BURNS ) ;too many retrys 
+      ENDIF
+
+    ELSE
+      A_ARC_INSTR=A_SEAM_RDY
+      TECH_MOTION=FALSE 
+
+      IF NOT(WAI_INP1(A_I_BRN_FREE)) THEN
+        REPEAT
+          MESS_DLG (WORK_PIECE )
+        UNTIL (WAI_INP1(A_I_BRN_FREE))
+      ENDIF
+    ENDIF
+
+  ENDIF
+
+  A_WLD_ACTIV=#IDLE
+  A_GAS_FLOW=#IDLE
+  TECH_MOTION=FALSE ; mark of disabling Flying ARC
+  A_COLD_SEAM=#IDLE
+  A_WELD_MEM=#IDLE
+  A_ARC_INSTR=A_SEAM_RDY
+
+  RESTORE_OVR ( )
+  RESTORE_MOVM ( )
+
+  WHILE  ($TIMER_FLAG[16]==FALSE)
+    WAIT SEC 0.012
+  ENDWHILE
+
+  IF ((A_BB_MODE<>#SSDV8_MODE) AND (A_FG_THERM<>0)) THEN
+    A_TH1_ACT_G=0
+    A_TH1_ACT_O=0
+    A_TH2_ACT_G=0
+    A_TH2_ACT_O=0
+  ENDIF
+
+END ;(FINISH_SEAM)
+;--------------------------------------
+; error handler different possibilities
+; robot and process errors
+;--------------------------------------
+DEF  ARC_TECH_STP (ERROR :IN )
+
+  DECL A_CMD_T ERROR
+
+  IF ERROR==#APPL_ERROR THEN
+    BRAKE
+    INTERRUPT OFF 4
+  ENDIF
+
+  INTERRUPT OFF 3
+
+  IF A_INTR_MODE==#IDLE THEN
+    A_SV_WLD_STS=A_WLD_ACTIV
+    IF A_ISR4_FLAG==#ACTIVE THEN
+      A_SAFE_ISR4=#ACTIVE
+    ELSE
+      A_SAFE_ISR4=#IDLE
+    ENDIF
+  ENDIF
+
+  IF ((A_WLD_ACTIV==#ACTIVE) OR (A_GAS_FLOW==#ACTIVE) OR (A_SV_WLD_STS==#ACTIVE) OR (A_WELD_MEM==#ACTIVE)) THEN
+    A50 (#I_SENSOR_OFF )
+    SET_OUT1 (A_O_FLT_SIGN,#SET_IO )
+  ELSE
+    IF A_CLEANER==#ACTIVE THEN
+      SET_BIN_GRP (A_O_DISBL_P[],#ADV_STOP )
+    ENDIF
+  ENDIF
+
+  IF A_WLD_ACTIV==#ACTIVE THEN
+    ARC_MSG (#SAF_CYCFLAG )
+  ENDIF
+
+  TECH_STP_SUB ( )
+  CANCEL_WEAVE ( )
+
+  IF (((($STOPMESS==TRUE) OR (ERROR==#APPL_ERROR) OR (A_SV_WLD_STS==A_WLD_ACTIV) OR (A_WELD_MEM==#ACTIVE)) AND (A_INTR_MODE==#IDLE))) THEN
+
+    SET_OUT1 (A_O_FLT_APPL,#SET_IO )
+    A_INTR_MODE=#ACTIVE
+
+    IF (ERROR==#APPL_ERROR) THEN
+      ERROR_COUNT=ERROR_COUNT+1
+
+      IF ((A_SPS_ACTION==#IDLE) AND (A_RESTRT_OPT<>#USR_SEAM)) THEN
+        A_SEAM_CTRL=A_SEAM_CTRL B_AND 'B1111' ;unmask the bitfield
+        ARC_MSG (#GIVE_USR_MSG )
+        LIN  $POS_RET
+      ELSE
+        A_SEAM_CTRL=A_SEAM_CTRL B_OR 'B00010000' ; $STOPMESS failure
+      ENDIF
+
+      IF A_RESTRT_OPT<>#USR_SEAM THEN
+        SET_OUT1 (A_O_FLT_SIGN,#RESET_IO )
+        SET_BIN_GRP (A_O_ACK_FLT[],#STOP_PULS )
+      ENDIF
+
+      IF (($MOVE_BCO==FALSE) AND ($ON_PATH==FALSE) AND ( NOT ($MODE_OP==#T1)) AND ( NOT ($MODE_OP==#T2))) AND (ERROR==#APPL_ERROR) THEN
+        LIN  $POS_RET
+      ENDIF
+
+    ENDIF
+  ENDIF
+
+END ;(ARC_TECH_STP) 
+;------------------------------
+; Process continuing
+; from robot and process errors
+;------------------------------
+DEF  RESTART_IR (ERROR :IN )
+
+  DECL A_CMD_T ERROR
+
+  SWITCH  A_RESTRT_OPT
+
+  CASE #COLD_SEAM
+
+    A_COLD_SEAM=#ACTIVE
+    SET_OUT1 (A_O_FLT_APPL,#SET_IO )
+    COLD_WEAV_ON ( )
+
+  CASE #RESTART
+
+    IF (((A_SV_WLD_STS==#ACTIVE) OR (A_WELD_MEM==#ACTIVE)) AND (A_SPS_ACTION==#IDLE)) THEN
+      IF A_HOT_WELD==#ACTIVE THEN
+        I_ARC_ON (ERROR )
+      ELSE
+        COLD_WEAV_ON ( )
+      ENDIF
+    ELSE
+      COLD_WEAV_ON ( )
+    ENDIF
+
+  CASE #LIM_RESTART
+
+    IF (((A_SV_WLD_STS==#ACTIVE) OR (A_WELD_MEM==#ACTIVE)) AND (A_SPS_ACTION==#IDLE) AND (RETRY_COUNT<=MAX_RETRY) AND (ERROR_COUNT<=MAX_ERROR)) THEN
+      IF A_HOT_WELD==#ACTIVE THEN
+        I_ARC_ON (ERROR )
+      ELSE
+        COLD_WEAV_ON ( )
+      ENDIF
+    ELSE
+      IF A_HOT_WELD==#ACTIVE THEN
+        IF ((RETRY_COUNT>MAX_RETRY) OR (ERROR_COUNT>MAX_ERROR)) THEN
+          MESS_DLG (LIM_RESTART )
+          A_COLD_SEAM=#ACTIVE
+        ENDIF
+      ELSE
+        COLD_WEAV_ON ( )
+      ENDIF
+    ENDIF
+
+  CASE #USR_SEAM
+
+    A_ISR_SELECT=TRUE
+
+    IF (ERROR==#APPL_ERROR) THEN
+      FLT_SERV (A_SV_WLD_STS,#IDLE )
+      IF A_SPS_ACTION==#IDLE THEN
+        ARC_MSG (#GIVE_USR_MSG )
+        LIN  $POS_RET
+      ENDIF
+    ENDIF
+
+    SET_OUT1 (A_O_FLT_SIGN,#RESET_IO )
+    SET_BIN_GRP (A_O_ACK_FLT[],#STOP_PULS )
+
+    IF (($MOVE_BCO==FALSE) AND ($ON_PATH==FALSE) AND ( NOT ($MODE_OP==#T1)) AND ( NOT ($MODE_OP==#T2))) THEN
+      LIN  $POS_RET
+    ENDIF
+
+    IF (((A_SV_WLD_STS==#ACTIVE) OR (A_WELD_MEM==#ACTIVE)) AND (A_SPS_ACTION==#IDLE)) THEN
+      IF A_HOT_WELD==#ACTIVE THEN
+        I_ARC_ON (ERROR )
+      ELSE
+        COLD_WEAV_ON ( )
+      ENDIF
+    ELSE
+      COLD_WEAV_ON ( )
+    ENDIF
+
+    A_ISR_SELECT=FALSE
+
+  DEFAULT
+
+  ENDSWITCH
+
+  A_INTR_MODE=#IDLE
+
+  IF A_SV_WLD_STS==#ACTIVE THEN
+    A_SV_WLD_STS=#IDLE
+  ENDIF
+
+  SET_OUT1 (A_O_FLT_SIGN,#RESET_IO )
+  SET_OUT1 (A_O_FLT_STRT,#RESET_IO )
+
+  IF A_SAFE_ISR4==#ACTIVE THEN
+    INTERRUPT ON 4
+  ENDIF
+
+  IF A_SPS_ACTION==#ACTIVE THEN
+    A_SPS_ACTION=#IDLE ; dummy run TECH_STOP
+  ENDIF
+
+  IF (A_RESTRT_OPT<>#COLD_SEAM) THEN
+    SET_OUT1 (A_O_FLT_APPL,#RESET_IO )
+  ENDIF
+
+  A_SEAM_CTRL=0 ; RESET of Seam control information
+
+  INTERRUPT ON 3
+
+END ;(RESTART_IR)
+;--------------------
+; Restart after Fault
+;--------------------
+DEF  I_ARC_ON (ARC_CMD :IN )
+
+  DECL A_CMD_T ARC_CMD
+
+  IF WELD_COND_R1()  THEN
+    CHECK_WELDER ( ) ; Check welder and create message,receipt mechanism
+  ENDIF
+
+  A_FIFO_READ=A_FIFO_READ-1
+
+  IF A_FIFO_READ==0 THEN
+    A_FIFO_READ=A_FIFO_MAX
+  ENDIF
+
+  IF ((A_APPLICAT==#THICK) AND (A_S_PARA_ACT.START_T>0.0)) THEN
+    SET_ANOUT (#START_PAR,ARC_CMD ) ;start parameter
+  ELSE
+    SET_ANOUT (#FIFO_W_PAR,ARC_CMD )
+  ENDIF
+
+  INTERRUPT OFF 4
+  A_ISR4_FLAG=#IDLE
+  ARC_START (A_TECH_STOP,ARC_CMD )
+  I_FG_MECH_ON ( )
+  I_FG_THRM_ON ( )
+
+  IF (A_APPLICAT==#THICK) THEN
+    SET_ANOUT (#FIFO_W_PAR,ARC_CMD ) ;weld parameter
+  ENDIF
+
+  IF SEN_PARA_ACT.STS==#ACTIVE THEN
+    IF ARC_CMD==#ARC_SEAM THEN
+      A50 (#SENSOR_ON ) ;forced ARC_ON 
+    ELSE
+      IF ARC_CMD==#HPU_ARC THEN
+        IF ((A_HOT_TAST==TRUE) AND (A_HOT_WELD==#ACTIVE)) THEN
+          A50 (#I_SENSOR_ON )
+          A_HOT_TAST=FALSE
+        ELSE
+          A50 (#SYNC_START )
+        ENDIF
+      ELSE
+        A50 (#I_SENSOR_ON )
+      ENDIF
+    ENDIF
+  ELSE
+    A50 (#I_SENSOR_OFF )
+  ENDIF
+
+  IF A_FIFO_READ==A_FIFO_MAX THEN
+    A_FIFO_READ=1
+  ELSE
+    A_FIFO_READ=A_FIFO_READ+1
+  ENDIF
+
+END ;(I_ARC_ON)
+;-----------------------------------
+; calculating of analog outputs
+; calculating of BB-Channel
+; START_SET,WELD_SET,EK_SET,FIFO_SET
+;-----------------------------------
+DEF  PREP_ANOUTS (CH_IN :IN,TH_CH1,TH_CH2 :IN,CALC_MODE,WELD_MODE :IN )
+
+  DECL A_ANA_SET_T8 CH_IN
+  DECL A_CALC_T CALC_MODE
+  DECL REAL ANA_V[10]
+  REAL TH_CH1,TH_CH2
+  INT N,WELD_MODE
+
+  IF CALC_MODE==#FIFO_WLD_PAR THEN
+    FOR N=1 TO  A_ACT_AN_MAX
+      ANA_V[N]=0.0
+    ENDFOR
+  ENDIF
+
+  IF A_FG_THERM>0 THEN ; calculating of gain and offset of dynamic analog output
+    ANA_CALC (TH_CH1,ANA_V[9],WELD_MODE,1 ) ; Thermal weaving Channel 1
+    ANA_CALC (TH_CH2,ANA_V[10],WELD_MODE,2 ) ; Thermal weaving Channel 2
+  ENDIF
+
+  ANA_CALC (CH_IN.CH1,ANA_V[1],WELD_MODE,1 ) ; Channel 1
+  ANA_CALC (CH_IN.CH2,ANA_V[2],WELD_MODE,2 ) ; Channel 2
+
+  SWITCH  A_ACT_AN_MAX
+
+  CASE 3
+    ANA_CALC (CH_IN.CH3,ANA_V[3],WELD_MODE,3 ) ; Channel 3
+  CASE 4
+    ANA_CALC (CH_IN.CH3,ANA_V[3],WELD_MODE,3 ) ; Channel 3
+    ANA_CALC (CH_IN.CH4,ANA_V[4],WELD_MODE,4 ) ; Channel 4
+  CASE 5
+    ANA_CALC (CH_IN.CH3,ANA_V[3],WELD_MODE,3 ) ; Channel 3
+    ANA_CALC (CH_IN.CH4,ANA_V[4],WELD_MODE,4 ) ; Channel 4
+    ANA_CALC (CH_IN.CH5,ANA_V[5],WELD_MODE,5 ) ; Channel 5
+  CASE 6
+    ANA_CALC (CH_IN.CH3,ANA_V[3],WELD_MODE,3 ) ; Channel 3
+    ANA_CALC (CH_IN.CH4,ANA_V[4],WELD_MODE,4 ) ; Channel 4
+    ANA_CALC (CH_IN.CH5,ANA_V[5],WELD_MODE,5 ) ; Channel 5
+    ANA_CALC (CH_IN.CH6,ANA_V[6],WELD_MODE,6 ) ; Channel 6
+  CASE 7
+    ANA_CALC (CH_IN.CH3,ANA_V[3],WELD_MODE,3 ) ; Channel 3
+    ANA_CALC (CH_IN.CH4,ANA_V[4],WELD_MODE,4 ) ; Channel 4
+    ANA_CALC (CH_IN.CH5,ANA_V[5],WELD_MODE,5 ) ; Channel 5
+    ANA_CALC (CH_IN.CH6,ANA_V[6],WELD_MODE,6 ) ; Channel 6
+    ANA_CALC (CH_IN.CH7,ANA_V[7],WELD_MODE,7 ) ; Channel 7
+  CASE 8
+    ANA_CALC (CH_IN.CH3,ANA_V[3],WELD_MODE,3 ) ; Channel 3
+    ANA_CALC (CH_IN.CH4,ANA_V[4],WELD_MODE,4 ) ; Channel 4
+    ANA_CALC (CH_IN.CH5,ANA_V[5],WELD_MODE,5 ) ; Channel 5
+    ANA_CALC (CH_IN.CH6,ANA_V[6],WELD_MODE,6 ) ; Channel 6
+    ANA_CALC (CH_IN.CH7,ANA_V[7],WELD_MODE,7 ) ; Channel 7
+    ANA_CALC (CH_IN.CH8,ANA_V[8],WELD_MODE,8 ) ; Channel 8
+
+  DEFAULT
+
+  ENDSWITCH
+
+  SWITCH  CALC_MODE
+
+  CASE #DEF_STRT_PAR
+
+    FOR N=1 TO  A_ACT_AN_MAX
+      A_STRT_PAR[N]=ANA_V[N]
+    ENDFOR
+
+    IF ((A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL>0) AND (A_BBT_MAX>0) AND (A_BB_CHANNEL>A_ACT_AN_MAX)) THEN
+      A_STRT_PAR[A_BB_CHANNEL]=(A_E_PARA_ACT.BURNBACK_T/A_BBT_MAX)
+      IF A_STRT_PAR[A_BB_CHANNEL]>1.0 THEN
+        A_STRT_PAR[A_BB_CHANNEL]=1.0
+      ENDIF
+    ENDIF
+
+  CASE #FIFO_WLD_PAR ; Presettings for all channels
+
+    IF A_FG_THERM==0 THEN
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH1=ANA_V[1]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH2=ANA_V[2]
+    ELSE
+      A_TH_FIFO[A_FIFO_WRITE].OFS1=(ANA_V[1]+ANA_V[9])*0.5
+      A_TH_FIFO[A_FIFO_WRITE].OFS2=(ANA_V[2]+ANA_V[10])*0.5
+      A_TH_FIFO[A_FIFO_WRITE].GAIN1=(ANA_V[1]-ANA_V[9])*0.5
+      A_TH_FIFO[A_FIFO_WRITE].GAIN2=(ANA_V[2]-ANA_V[10])*0.5
+    ENDIF
+
+    SWITCH  A_ACT_AN_MAX
+
+    CASE 3
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH3=ANA_V[3]
+    CASE 4
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH3=ANA_V[3]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH4=ANA_V[4]
+    CASE 5
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH3=ANA_V[3]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH4=ANA_V[4]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH5=ANA_V[5]
+    CASE 6
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH3=ANA_V[3]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH4=ANA_V[4]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH5=ANA_V[5]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH6=ANA_V[6]
+    CASE 7
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH3=ANA_V[3]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH4=ANA_V[4]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH5=ANA_V[5]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH6=ANA_V[6]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH7=ANA_V[7]
+    CASE 8
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH3=ANA_V[3]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH4=ANA_V[4]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH5=ANA_V[5]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH6=ANA_V[6]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH7=ANA_V[7]
+      A_W_PAR_FIFO[A_FIFO_WRITE].CH8=ANA_V[8]
+
+    DEFAULT
+
+    ENDSWITCH
+
+    IF ((A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL>0) AND (A_BBT_MAX>0) AND (A_BB_CHANNEL>A_ACT_AN_MAX)) THEN
+      A_W_PAR_FIFO[A_FIFO_WRITE].BBT_CH=(W.BURNBACK_T/A_BBT_MAX)
+      IF A_W_PAR_FIFO[A_FIFO_WRITE].BBT_CH>1.0 THEN
+        A_W_PAR_FIFO[A_FIFO_WRITE].BBT_CH=1.0
+      ENDIF
+    ENDIF
+
+  CASE #BRN_FREE
+
+    IF A_FG_THERM>0 THEN ; calculating of gain and offset of dynamic analog output
+
+      A_BF_T1_OFS=ANA_V[1]
+      A_BF_T2_OFS=ANA_V[2]
+      A_BF_T1_GAIN=0.0
+      A_BF_T2_GAIN=0.0
+
+      FOR N=3 TO  A_ACT_AN_MAX
+        A_BURN_FREE[N]=ANA_V[N]
+      ENDFOR
+    ELSE
+      FOR N=1 TO  A_ACT_AN_MAX
+        A_BURN_FREE[N]=ANA_V[N]
+      ENDFOR
+    ENDIF
+
+  CASE #DEF_EK_PAR
+
+    IF A_FG_THERM>0 THEN
+
+      A_EK_TH1_O=ANA_V[1]
+      A_EK_TH2_O=ANA_V[2]
+      A_EK_TH1_G=0.0
+      A_EK_TH2_G=0.0
+
+      FOR N=3 TO  A_ACT_AN_MAX
+        A_EK_PAR[N]=ANA_V[N]
+      ENDFOR
+    ELSE
+      FOR N=1 TO  A_ACT_AN_MAX
+        A_EK_PAR[N]=ANA_V[N]
+      ENDFOR
+    ENDIF
+
+    IF ((A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL>0) AND (A_BBT_MAX>0) AND (A_BB_CHANNEL>A_ACT_AN_MAX)) THEN
+      A_EK_PAR[A_BB_CHANNEL]=(E.BURNBACK_T/A_BBT_MAX)
+      IF A_EK_PAR[A_BB_CHANNEL]>1.0 THEN
+        A_EK_PAR[A_BB_CHANNEL]=1.0
+      ENDIF
+    ENDIF
+
+  DEFAULT
+
+  ENDSWITCH
+
+END ;(PREP_ANOUTS) 
+;--------------------------------------
+; switching of prepared analog set
+; including programmed BB_MODE
+;--------------------------------------
+DEF  SET_ANOUT (OUTPUT_OF :IN,ARC_CMD :IN )
+
+  DECL A_CMD_T ARC_CMD
+  INT N
+
+  DECL A_ANOUT_T OUTPUT_OF
+
+  SWITCH  OUTPUT_OF
+
+  CASE #START_PAR
+
+    IF (A_FG_THERM==0) THEN
+      FOR N=1 TO  2
+        CONTINUE
+        $ANOUT[A_ANAOUT_NO[N]]=A_STRT_PAR[N]
+      ENDFOR
+    ELSE
+      A_TH1_ACT_G=0.0
+      A_TH1_ACT_O=A_STRT_PAR[1]
+      A_TH2_ACT_G=0.0
+      A_TH2_ACT_O=A_STRT_PAR[2]
+    ENDIF
+
+    FOR N=3 TO  A_ACT_AN_MAX
+      CONTINUE
+      $ANOUT[A_ANAOUT_NO[N]]=A_STRT_PAR[N]
+    ENDFOR
+
+    IF ((A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL>0) AND (A_BB_CHANNEL>A_ACT_AN_MAX)) THEN
+      IF (A_ALU_OPTION==#IDLE) THEN
+        CONTINUE
+        $ANOUT[A_BB_CHANNEL]=A_STRT_PAR[A_BB_CHANNEL]
+      ELSE
+        CONTINUE
+        $ANOUT[A_BB_CHANNEL]=0.0
+      ENDIF
+    ENDIF
+
+  CASE #FIFO_W_PAR
+
+    IF (((A_RAMP_OPTION==TRUE) AND (A_ACT_AN_MAX<8) AND (A50_OPTION==#DISABLED) AND ($EDIT_MODE<>2)) AND (A_W_PARA_ACT.ANA8>0) AND (ARC_CMD==#ARC_SEAM)) THEN
+
+      IF ((A_FIFO_READ==1) AND (A_FIFO_WRITE<=$ADVANCE) AND (A_S_PARA_ACT.START_T>0.0)) THEN
+        START_RAMP ( )
+      ELSE
+        IF ((A_S_PARA_ACT.START_T==0.0) AND (A_FIFO_READ==1)) THEN
+          DEF2_CHANNEL ( )
+        ELSE
+          SECTION_RAMP ( )
+        ENDIF
+      ENDIF
+
+    ELSE
+      DEF2_CHANNEL ( )
+    ENDIF
+
+    SWITCH  A_ACT_AN_MAX
+
+    CASE 3
+      $ANOUT[A_ANAOUT_NO[3]]=A_W_PAR_FIFO[A_FIFO_READ].CH3
+    CASE 4
+      $ANOUT[A_ANAOUT_NO[3]]=A_W_PAR_FIFO[A_FIFO_READ].CH3
+      $ANOUT[A_ANAOUT_NO[4]]=A_W_PAR_FIFO[A_FIFO_READ].CH4
+    CASE 5
+      $ANOUT[A_ANAOUT_NO[3]]=A_W_PAR_FIFO[A_FIFO_READ].CH3
+      $ANOUT[A_ANAOUT_NO[4]]=A_W_PAR_FIFO[A_FIFO_READ].CH4
+      $ANOUT[A_ANAOUT_NO[5]]=A_W_PAR_FIFO[A_FIFO_READ].CH5
+    CASE 6
+      $ANOUT[A_ANAOUT_NO[3]]=A_W_PAR_FIFO[A_FIFO_READ].CH3
+      $ANOUT[A_ANAOUT_NO[4]]=A_W_PAR_FIFO[A_FIFO_READ].CH4
+      $ANOUT[A_ANAOUT_NO[5]]=A_W_PAR_FIFO[A_FIFO_READ].CH5
+      $ANOUT[A_ANAOUT_NO[6]]=A_W_PAR_FIFO[A_FIFO_READ].CH6
+    CASE 7
+      $ANOUT[A_ANAOUT_NO[3]]=A_W_PAR_FIFO[A_FIFO_READ].CH3
+      $ANOUT[A_ANAOUT_NO[4]]=A_W_PAR_FIFO[A_FIFO_READ].CH4
+      $ANOUT[A_ANAOUT_NO[5]]=A_W_PAR_FIFO[A_FIFO_READ].CH5
+      $ANOUT[A_ANAOUT_NO[6]]=A_W_PAR_FIFO[A_FIFO_READ].CH6
+      $ANOUT[A_ANAOUT_NO[7]]=A_W_PAR_FIFO[A_FIFO_READ].CH7
+    CASE 8
+      $ANOUT[A_ANAOUT_NO[3]]=A_W_PAR_FIFO[A_FIFO_READ].CH3
+      $ANOUT[A_ANAOUT_NO[4]]=A_W_PAR_FIFO[A_FIFO_READ].CH4
+      $ANOUT[A_ANAOUT_NO[5]]=A_W_PAR_FIFO[A_FIFO_READ].CH5
+      $ANOUT[A_ANAOUT_NO[6]]=A_W_PAR_FIFO[A_FIFO_READ].CH6
+      $ANOUT[A_ANAOUT_NO[7]]=A_W_PAR_FIFO[A_FIFO_READ].CH7
+      $ANOUT[A_ANAOUT_NO[8]]=A_W_PAR_FIFO[A_FIFO_READ].CH8
+
+    ENDSWITCH
+
+    IF ((A_BB_CHANNEL>0) AND (A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL>A_ACT_AN_MAX)) THEN
+      $ANOUT[A_BB_CHANNEL]=A_W_PAR_FIFO[A_FIFO_READ].BBT_CH
+    ENDIF
+
+  CASE #BRN_FREE_PAR
+
+    IF A_FG_THERM>0 THEN
+
+      A_TH1_ACT_G=A_BF_T1_GAIN
+      A_TH1_ACT_O=A_BF_T1_OFS
+      A_TH2_ACT_G=A_BF_T2_GAIN
+      A_TH2_ACT_O=A_BF_T2_OFS
+
+      FOR N=3 TO  A_ACT_AN_MAX
+        $ANOUT[A_ANAOUT_NO[N]]=A_BURN_FREE[N]
+      ENDFOR
+    ELSE
+      FOR N=1 TO  A_ACT_AN_MAX
+        $ANOUT[A_ANAOUT_NO[N]]=A_BURN_FREE[N]
+      ENDFOR
+    ENDIF
+
+  CASE #EK_PAR
+
+    IF A_FG_THERM>0 THEN
+      A_TH1_ACT_G=A_EK_TH1_G
+      A_TH1_ACT_O=A_EK_TH1_O
+      A_TH2_ACT_G=A_EK_TH2_G
+      A_TH2_ACT_O=A_EK_TH2_O
+
+      FOR N=3 TO  A_ACT_AN_MAX
+        $ANOUT[A_ANAOUT_NO[N]]=A_EK_PAR[N]
+      ENDFOR
+
+    ELSE
+      FOR N=1 TO  A_ACT_AN_MAX
+        $ANOUT[A_ANAOUT_NO[N]]=A_EK_PAR[N]
+      ENDFOR
+    ENDIF
+
+    IF ((A_BB_MODE==#SSDV8_MODE) AND (A_BB_CHANNEL>0) AND (A_BB_CHANNEL>A_ACT_AN_MAX)) THEN
+      $ANOUT[A_BB_CHANNEL]=A_EK_PAR[A_BB_CHANNEL]
+    ENDIF
+
+  DEFAULT
+
+  ENDSWITCH
+
+END ;(SET_ANOUT)
+;--------------------------------------------
+; calculate endcrater data in ARC_OFF command
+; calculate burnback  data
+;--------------------------------------------         
+DEF  PRE_OFF (WELD_MODE :IN )
+
+  DECL A_ANA_SET_T8 EK_DATA,BB_DATA
+
+  INT I,WELD_MODE
+
+  EK_DATA.CH1=E.ANA1_E
+  EK_DATA.CH2=E.ANA2_E
+  EK_DATA.CH3=E.ANA3_E
+  EK_DATA.CH4=E.ANA4_E
+  EK_DATA.CH5=E.ANA5_E
+  EK_DATA.CH6=E.ANA6_E
+  EK_DATA.CH7=E.ANA7_E
+  EK_DATA.CH8=E.ANA8_E
+
+  PREP_ANOUTS (EK_DATA,0.0,0.0,#DEF_EK_PAR,WELD_MODE )
+
+END ;(PRE_OFF)
+;------------------------------------------------
+; ISR: ARC_ON/OFF from teach pendant
+; INTERRUPT 5 Triggered at  A_FLY_ARC==TRUE
+;------------------------------------------------
+DEF  HPU_ON_OFF (ARC_CMD :IN )
+
+  DECL A_CMD_T ARC_CMD
+  BOOL SENSOR_STS
+
+  A_HPU_CMD=#ACTIVE
+  INTERRUPT OFF 5
+
+  IF (A_HOT_WELD==#ACTIVE) THEN
+
+    IF ((A_ARC_INSTR>A_ARC_IDLE) AND (A_ARC_INSTR<A_SEAM_RDY) AND (WELD_COND_R1()==TRUE) AND ($ON_PATH==TRUE) AND (TECH_MOTION==TRUE)) THEN
+
+      IF A_STRT_BRAKE==#ACTIVE THEN
+        BRAKE
+      ENDIF
+
+      SET_BIN_GRP (A_O_ACK_FLT[],#STOP_PULS ) ; acknowledge weld fault
+      I_ARC_ON (ARC_CMD )
+
+    ENDIF
+
+  ELSE
+
+    IF A_END_BRAKE==#ACTIVE THEN
+      BRAKE
+    ENDIF
+
+    A_ISR4_FLAG=#IDLE
+    INTERRUPT OFF 4 ; avoid Trigger seam control
+
+    IF ((SEN_PARA_ACT.STS==#ACTIVE) AND (TECH_MOTION==TRUE)) THEN
+      IF $TECH_C[A_FG_SENSOR].MODE==#CYCLE THEN
+        A50 (#SEN_TSTOP )
+      ENDIF
+    ENDIF
+
+    TECH_STP_SUB ( )
+
+    IF TECH_MOTION==TRUE THEN
+      A50 (#DRY_WEAVE )
+    ENDIF
+
+  ENDIF
+
+  A_SPS_ACTION=#IDLE
+  INTERRUPT ON 5
+  A_HPU_CMD=#IDLE
+
+END ;(HPU_ON_OFF)
+;-----------------------------------
+; error handler for TECHSTOP.SUB
+; interpreter stop
+; switch off all actions of  process
+;-----------------------------------
+DEF  TECH_STP_SUB ( )
+
+  SET_BIN_GRP (A_O_DISBL_P[],#ADV_STOP )
+
+  IF A_CLD_TSTP==#ACTIVE THEN
+    IF A_BB_MODE==#REDUCE THEN
+      BB_REDUCE ( )
+    ENDIF
+
+    BURNBACK_SUB ( )
+  ELSE
+    IF ((A_WLD_ACTIV==#ACTIVE) OR (A_GAS_FLOW==#ACTIVE)) THEN
+      IF A_BB_MODE==#REDUCE THEN
+        BB_REDUCE ( )
+      ENDIF
+      BURNBACK_SUB ( )
+    ENDIF
+  ENDIF
+
+  A_GAS_FLOW=#IDLE
+  A_WLD_ACTIV=#IDLE
+
+END ;(TECH_STP_SUB)
+;----------------------
+; WELD condition
+; weld mode on R1 level
+; flag = F_WELD_COND
+;----------------------
+DEFFCT  BOOL WELD_COND_R1()
+
+  DECL A_BOOL_T TST_PRG_LA,ON_PATH,MOVE_BCO
+  DECL MODE_OP SAFE_MOTION
+  BOOL MOTION_FLAG
+
+
+  MOTION_FLAG=TRUE
+
+  CONTINUE
+  IF $PRO_MODE1==#GO THEN
+    TST_PRG_LA=#ACTIVE
+  ELSE
+    TST_PRG_LA=#IDLE
+    IF A_HOT_WELD==#ACTIVE THEN
+      MESS_DLG (M_STEP_WLD )
+    ENDIF
+  ENDIF
+
+  CONTINUE
+  IF $ON_PATH==TRUE THEN
+    ON_PATH=#ACTIVE
+  ELSE
+    ON_PATH=#IDLE
+  ENDIF
+
+  CONTINUE
+  IF $MOVE_BCO==TRUE THEN
+    MOVE_BCO=#ACTIVE
+  ELSE
+    MOVE_BCO=#IDLE
+  ENDIF
+
+  IF (PROC_IN_T1==FALSE) THEN
+    CONTINUE
+    SAFE_MOTION=$MODE_OP
+    IF SAFE_MOTION==#T1 THEN
+      MOTION_FLAG=FALSE
+    ENDIF
+  ENDIF
+
+  IF PROC_ENABLE AND GET_INP(A_I_EN_W_EXT,#ADV_CONT) AND (TST_PRG_LA==#ACTIVE) AND (A_HOT_WELD==#ACTIVE) AND ((ON_PATH==#ACTIVE) OR (MOVE_BCO==#IDLE)) AND (A10_OPTION==#ACTIVE) AND (MOTION_FLAG) THEN
+    A_F_WLD_COND=#ACTIVE
+    RETURN  (TRUE)
+  ELSE
+    A_F_WLD_COND=#IDLE
+    RETURN  (FALSE)
+  ENDIF
+
+ENDFCT ;(WELD_COND_R1)
+;-------------------------------------------
+; subroutine sets a  group of binary outputs
+; results depends upon configuration
+; dynamic or static control of outputs
+;-------------------------------------------
+DEF  SET_BIN_GRP (OUTP,SWI_MODE )
+
+  DECL FCT_OUT_T OUTP[]
+  DECL A_B_OUT_TYP SWI_MODE
+  BOOL PULS_STATE
+  INT N,NR,HELP
+  REAL PLS_TIME
+
+  FOR N=1 TO  3
+    IF (OUTP[N].NO>0) THEN ; Test if part of function group  activated 
+      HELP=ABS(OUTP[N].NO)
+      IF HELP>0 THEN
+        NR=ABS(A_WLD_OUT[HELP].OUT_NR)
+        IF (NR>0) THEN ; binary output is configured
+          IF (OUTP[N].PULS_TIME==0.0) THEN
+            SWITCH  SWI_MODE
+
+            CASE #ADV_STOP
+              $OUT[NR]=OUTP[N].STATE
+            CASE #ADV_CONT
+              CONTINUE
+              $OUT[NR]=OUTP[N].STATE
+            CASE #STOP_PULS ; only because symetry
+              CONTINUE
+              $OUT[NR]=OUTP[N].STATE
+            CASE #FINAL_STS
+              $OUT[NR]= NOT (OUTP[N].STATE) ; signal state conversion
+            DEFAULT
+            ENDSWITCH
+          ELSE
+            PULS_STATE=OUTP[N].STATE
+            PLS_TIME=ABS(OUTP[N].PULS_TIME)
+
+            SWITCH  SWI_MODE
+
+            CASE #ADV_STOP,#FINAL_STS
+              PULSE ($OUT[NR],PULS_STATE,PLS_TIME )
+            CASE #ADV_CONT
+              CONTINUE
+              PULSE ($OUT[NR],PULS_STATE,PLS_TIME )
+            CASE #STOP_PULS
+              PULSE ($OUT[NR],PULS_STATE,PLS_TIME )
+              WAIT FOR  $OUT[NR]<>PULS_STATE
+            DEFAULT
+            ENDSWITCH
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDFOR
+
+END ;(SET_BIN_GRP)
+;-----------------------------------------
+DEF  A_FAST_RESET_BIN_GRP (OUTP:OUT)
+
+  DECL FCT_OUT_T OUTP[]
+  BOOL PULS_STATE
+  INT N,NR,HELP
+  REAL PLS_TIME
+
+  FOR N=1 TO  3
+    IF (OUTP[N].NO>0) THEN ; Test if part of function group  activated 
+      HELP=ABS(OUTP[N].NO)
+      IF HELP>0 THEN
+        NR=ABS(A_WLD_OUT[HELP].OUT_NR)
+        IF (NR>0) THEN ; binary output is configured
+          IF (OUTP[N].PULS_TIME==0.0) THEN
+             $OUT[NR]=OUTP[N].STATE
+          ELSE
+             $OUT[NR]=NOT(OUTP[N].STATE) ;invert polarity and make it static
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDFOR
+
+END ;(A_FAST_RESET_BIN_GRP)
+;-----------------------------------------
+;set / reset  one output dynamic or static 
+;-----------------------------------------
+DEF  SET_OUT1 (OUTP,I_O_STATUS )
+
+  DECL FCT_OUT_T OUTP
+  DECL A_SET1_TYP I_O_STATUS ;#SET_IO,#RESET_IO
+  BOOL STATUS ;Typ adaption 
+  INT NO1_ABS,HELP
+
+  IF I_O_STATUS==#SET_IO THEN
+    STATUS=TRUE
+  ELSE
+    STATUS=FALSE
+  ENDIF
+
+  IF (OUTP.NO>0) THEN
+    HELP=ABS(OUTP.NO)
+    IF HELP>0 THEN
+      NO1_ABS=ABS(A_WLD_OUT[HELP].OUT_NR)
+      IF NO1_ABS>0 THEN
+        IF OUTP.PULS_TIME>0 THEN
+          IF STATUS THEN
+            PULSE ($OUT[NO1_ABS],OUTP.STATE,OUTP.PULS_TIME )
+          ENDIF
+        ELSE
+          $OUT[NO1_ABS]=STATUS
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+
+END ;(SET_OUT1)
+;---------------------------------------------
+;read binary input with / without advance stop
+;---------------------------------------------
+DEFFCT  BOOL GET_INP(INP,READ_MODE)
+
+  DECL FCT_IN_T INP
+  DECL A_B_OUT_TYP READ_MODE
+  INT HELP
+
+  INT NO_ABS
+  BOOL RESULT
+
+  HELP=ABS(INP.NO)
+
+  IF HELP>0 THEN
+    NO_ABS=A_WLD_IN[HELP].IN_NR
+  ELSE
+    NO_ABS=0
+  ENDIF
+
+  IF NO_ABS>0 THEN
+    IF READ_MODE==#ADV_CONT THEN
+      CONTINUE
+      RESULT=$IN[NO_ABS]==INP.STATE
+    ELSE
+      RESULT=$IN[NO_ABS]==INP.STATE
+    ENDIF
+    RETURN  (RESULT)
+  ELSE
+    RETURN  (TRUE)
+  ENDIF
+
+ENDFCT ;(GET_INP)
+;----------------------------------------------------------------
+; searching the right straight line of controler characteristic
+; calculating of analog output upon the  configured chracteristic
+;----------------------------------------------------------------
+DEF  ANA_CALC (PARAM_IN,PARAM_OUT,MODE,CHNO )
+
+  REAL PARAM_IN,PARAM_OUT
+  INT MODE,CHNO
+  INT N
+
+  IF PARAM_IN>A_ANA_DEF[MODE,CHNO,3].PARA THEN
+    IF PARAM_IN>A_ANA_DEF[MODE,CHNO,4].PARA THEN
+      PARAM_OUT=PARAM_IN*A_ANA_VAL[MODE,CHNO,4].M+A_ANA_VAL[MODE,CHNO,4].N
+    ELSE
+      PARAM_OUT=PARAM_IN*A_ANA_VAL[MODE,CHNO,3].M+A_ANA_VAL[MODE,CHNO,3].N
+    ENDIF
+  ELSE
+    IF PARAM_IN>A_ANA_DEF[MODE,CHNO,2].PARA THEN
+      PARAM_OUT=PARAM_IN*A_ANA_VAL[MODE,CHNO,2].M+A_ANA_VAL[MODE,CHNO,2].N
+    ELSE
+      PARAM_OUT=PARAM_IN*A_ANA_VAL[MODE,CHNO,1].M+A_ANA_VAL[MODE,CHNO,1].N
+    ENDIF
+  ENDIF
+
+END ;(ANA_CALC)
+;-----------------------------------------------
+; reading of input group according configuration
+; generating of TIMEOUT and error  flag
+; different READ_MODE: 
+;-----------------------------------------------
+DEFFCT  BOOL WAI_INP(FIELD_NR[]:OUT,FIELD_STS[]:OUT,FIELD_SIZE:IN,WAIT_MODE:IN)
+
+  DECL A_WAIT_TYP WAIT_MODE
+  DECL INT FIELD_NR[] 
+  DECL BOOL FIELD_STS[] 
+  INT FIELD_SIZE,TIME_LIMIT
+  
+  A_COUNTER=0
+  TIME_LIMIT=A_TIME_OUT1*10/12 
+
+  SWITCH FIELD_SIZE
+
+  CASE 1
+
+    CONTINUE
+    WHILE  ((FIELD_STS[1]<>$IN[FIELD_NR[1]])  AND (A_COUNTER<=TIME_LIMIT)) 
+      A_COUNTER=A_COUNTER+1
+      CONTINUE
+      WAIT SEC 0.012
+      CONTINUE
+    ENDWHILE
+
+  CASE 2
+
+    CONTINUE
+    WHILE  (((FIELD_STS[1]<>$IN[FIELD_NR[1]]) OR (FIELD_STS[2]<>$IN[FIELD_NR[2]]))  AND (A_COUNTER<=TIME_LIMIT))
+      A_COUNTER=A_COUNTER+1
+      CONTINUE
+      WAIT SEC 0.012
+      CONTINUE
+    ENDWHILE
+
+  CASE 3
+
+    CONTINUE
+    WHILE  (((FIELD_STS[1]<>$IN[FIELD_NR[1]]) OR (FIELD_STS[2]<>$IN[FIELD_NR[2]]) OR (FIELD_STS[3]<>$IN[FIELD_NR[3]]) ) AND (A_COUNTER<=TIME_LIMIT)) 
+      A_COUNTER=A_COUNTER+1
+      CONTINUE
+      WAIT SEC 0.012
+      CONTINUE
+    ENDWHILE
+
+  DEFAULT
+
+  ENDSWITCH
+
+  IF (A_COUNTER>=TIME_LIMIT) THEN
+    RETURN  (FALSE)
+  ELSE
+    RETURN  (TRUE)
+  ENDIF
+
+ENDFCT ;(WAI_INP)
+;---------------------
+DEF  GAS_PRE_FLOW ( )
+
+  IF ((A_HPU_DRY_RN==#IDLE) AND WELD_COND_R1() AND (A_COLD_SEAM==#IDLE) AND (A_HOT_WELD==#ACTIVE) AND ($PRO_MODE<>#BSTEP )) THEN
+    A_GAS_FLOW=#ACTIVE
+    A_ARC_INSTR=A_ARC_ON
+    SET_BIN_GRP (A_O_GAS_PRE[],#ADV_STOP )
+    WAIT SEC A_S_PARA_ACT.GAS_PRE_T
+  ENDIF
+
+END ;(GAS_PRE_FLOW)
+;------------------------
+; prepare start parameter
+;------------------------
+DEF  PRE_STRT_PAR (ARC_MODE :IN )
+
+  DECL A_ANA_SET_T8 START_DATA
+  INT ARC_MODE
+
+  START_DATA.CH1=A_S_PARA_ACT.ANA1
+  START_DATA.CH2=A_S_PARA_ACT.ANA2
+  START_DATA.CH3=A_S_PARA_ACT.ANA3
+  START_DATA.CH4=A_S_PARA_ACT.ANA4
+  START_DATA.CH5=A_S_PARA_ACT.ANA5
+  START_DATA.CH6=A_S_PARA_ACT.ANA6
+  START_DATA.CH7=A_S_PARA_ACT.ANA7
+  START_DATA.CH8=A_S_PARA_ACT.ANA8
+  PREP_ANOUTS (START_DATA,0.0,0.0,#DEF_STRT_PAR,ARC_MODE )
+
+END ;(PRE_STRT_PAR)
+;---------------------
+; test if Welder ready
+;---------------------
+DEF  CHECK_WELDER ( )
+
+  WHILE  (( NOT (WELD_COND_R1()) OR  NOT (WAI_INP(WELD_COND[],W_COND_STS[],COND_SIZE,#COND_STOP))) AND (A_HPU_DRY_RN==#IDLE) AND (A_HOT_WELD==#ACTIVE))
+    SET_OUT1 (A_O_FLT_SIGN,#SET_IO )
+    MESS_DLG (WELDER_STS ) ; welder not ready
+    SET_OUT1 (A_O_FLT_SIGN,#RESET_IO )
+    SET_BIN_GRP (A_O_ACK_FLT[],#STOP_PULS ) ; acknowledge weld fault
+  ENDWHILE
+
+END ;(CHECK_WELDER)
+;----------------------
+; saving of all air cut 
+; movement parameters
+;----------------------
+DEF  SAVE_OLD_MOV ( )
+
+  INT N
+
+  A_FILTER_OLD=$FILTER
+  $FILTER=A_WEAVE_FILT
+
+  IF $EX_AX_NUM>0 THEN
+    FOR N=1 TO  $EX_AX_NUM
+      A_AC_EXT_OLD[N]=$ACC_EXTAX[N]
+      $ACC_EXTAX[N]=A_AC_EXT_TCH[N]
+    ENDFOR
+  ENDIF
+
+END ;(SAVE_OLD_MOVE)
+;----------------
+; Prepare DRY_RUN
+;----------------
+DEF  PRE_DRY_RUN ( )
+
+  IF A_HPU_DRY_RN==#ACTIVE THEN
+    IF $EDIT_MODE==2 THEN
+      CONTINUE
+      $VEL.CP=DRY_RN_VEL*2.0
+    ELSE
+      CONTINUE
+      $VEL.CP=DRY_RN_VEL*100.0/SAVE_OVR
+    ENDIF
+
+    $TECH[A_FG_MECH1].MODE=#OFF
+    $TECH[A_FG_MECH2].MODE=#OFF
+
+    IF A_FG_THERM>0 THEN
+      $TECH[A_FG_THERM].MODE=#OFF
+    ENDIF
+  ENDIF
+
+END ;(PRE_DRY_RUN)
+;----------------------
+; Prepare weldparameter
+; ARC_OFF or ARC_CMD
+;----------------------
+DEF  PRE_SWI_PAR (ARC_MODE :IN )
+
+  DECL A_ANA_SET_T8 WELD_DATA
+  INT ARC_MODE
+
+  WELD_DATA.CH1=W.ANA1
+  WELD_DATA.CH2=W.ANA2
+  WELD_DATA.CH3=W.ANA3
+  WELD_DATA.CH4=W.ANA4
+  WELD_DATA.CH5=W.ANA5
+  WELD_DATA.CH6=W.ANA6
+  WELD_DATA.CH7=W.ANA7
+  WELD_DATA.CH8=W.ANA8
+
+  IF (W.WEAVLEN_THER>0.0) AND (W.WEAVFIG_THER>0) AND (A_FG_THERM>0) AND (A50_OPTION==#DISABLED) THEN
+    PREP_ANOUTS (WELD_DATA,W.ANA1_THERM,W.ANA2_THERM,#FIFO_WLD_PAR,ARC_MODE )
+  ELSE
+    PREP_ANOUTS (WELD_DATA,W.ANA1,W.ANA2,#FIFO_WLD_PAR,ARC_MODE )
+  ENDIF
+
+END ;(PRE_SWI_PAR)
+;-----------------------
+; in case of FIFO_READ=6
+;-----------------------
+DEF  SWI_CTRL ( )
+
+  IF ((A_FIFO_READ==1) AND (A_FIFO_WRITE==1)) THEN
+    IF A_FG_THERM==0 THEN
+      A_W_PAR_FIFO[6].CH1=A_W_PAR_FIFO[1].CH1
+      A_W_PAR_FIFO[6].CH2=A_W_PAR_FIFO[1].CH2
+      A_W_PAR_FIFO[6].CH3=A_W_PAR_FIFO[1].CH3
+      A_W_PAR_FIFO[6].CH4=A_W_PAR_FIFO[1].CH4
+      A_W_PAR_FIFO[6].CH5=A_W_PAR_FIFO[1].CH5
+      A_W_PAR_FIFO[6].CH6=A_W_PAR_FIFO[1].CH6
+    ELSE
+      A_TH_FIFO[6].OFS1=A_TH_FIFO[1].OFS1
+      A_TH_FIFO[6].OFS2=A_TH_FIFO[1].OFS2
+      A_TH_FIFO[6].GAIN1=A_TH_FIFO[1].GAIN1
+      A_TH_FIFO[6].GAIN2=A_TH_FIFO[1].GAIN2
+    ENDIF
+
+    FIF_VELCTRL[6]=FIF_VELCTRL[1]
+
+    IF A_BB_MODE==#SSDV8_MODE THEN
+      A_W_PAR_FIFO[6].BBT_CH=A_W_PAR_FIFO[1].BBT_CH
+    ENDIF
+  ENDIF
+
+END ; (SWI_CTRL)
+;--------------------------
+; switch mechanical weaving
+;--------------------------
+DEF  FG_MECH_ON ( )
+
+  IF PS_TEMP_SET.STS==#IDLE THEN
+
+    IF ((W.WEAVLEN_MECH>0.0) AND (W.WEAVFIG_MECH>0)) THEN
+      $TECH[A_FG_MECH1].FCTCTRL.SCALE_IN=W.WEAVLEN_MECH
+      $TECH[A_FG_MECH1].FCTCTRL.SCALE_OUT=W.WEAVAMP_MECH
+
+      IF A_HPU_DRY_RN==#IDLE THEN
+        $TECH[A_FG_MECH1].MODE=#CYCLE
+      ELSE
+        $TECH[A_FG_MECH1].MODE=#OFF
+      ENDIF
+    ELSE
+      $TECH[A_FG_MECH1].MODE=#OFF
+    ENDIF
+
+    IF ((W.WEAVLEN_MECH>0.0) AND (W.WEAVFIG_MECH>0)) THEN
+      $TECH[A_FG_MECH2].FCTCTRL.SCALE_IN=W.WEAVLEN_MECH
+      $TECH[A_FG_MECH2].FCTCTRL.SCALE_OUT=W.WEAVAMP_MECH
+
+      IF A_HPU_DRY_RN==#IDLE THEN
+        $TECH[A_FG_MECH2].MODE=#CYCLE
+      ELSE
+        $TECH[A_FG_MECH2].MODE=#OFF
+      ENDIF
+    ELSE
+      $TECH[A_FG_MECH2].MODE=#OFF
+    ENDIF
+
+  ELSE
+    $TECH[A_FG_MECH1].MODE=#OFF
+    $TECH[A_FG_MECH2].MODE=#OFF
+  ENDIF
+
+END ;(FG_MECH_ON)
+;--------------------------
+; switch mechanical weaving
+; in interrupt mode
+;--------------------------
+DEF  I_FG_MECH_ON ( )
+
+  IF (SEN_PARA_ACT.STS==#IDLE) THEN
+    IF ((A_W_PARA_ACT.WEAVLEN_MECH>0.0) AND (A_W_PARA_ACT.WEAVFIG_MECH>0) AND (DRY_RN_CTL[FIF_DRY_RN]==FALSE)) THEN
+      $TECH_C[A_FG_MECH1].FCTCTRL.SCALE_IN=A_W_PARA_ACT.WEAVLEN_MECH
+      $TECH_C[A_FG_MECH1].FCTCTRL.SCALE_OUT=A_W_PARA_ACT.WEAVAMP_MECH
+
+      IF A_HPU_DRY_RN==#IDLE THEN
+        IF (SEN_PARA_ACT.STS<>#ACTIVE) THEN
+          $TECH_C[A_FG_MECH1].MODE=#CYCLE
+        ELSE
+          $TECH_C[A_FG_MECH1].MODE=#OFF
+        ENDIF
+      ELSE
+        $TECH_C[A_FG_MECH1].MODE=#OFF
+      ENDIF
+
+    ELSE
+      $TECH_C[A_FG_MECH1].MODE=#OFF
+    ENDIF
+  ELSE
+    $TECH_C[A_FG_MECH1].MODE=#OFF
+  ENDIF
+
+  IF (SEN_PARA_ACT.STS==#IDLE) THEN
+    IF ((A_W_PARA_ACT.WEAVLEN_MECH>0.0) AND (A_W_PARA_ACT.WEAVFIG_MECH>0) AND (DRY_RN_CTL[FIF_DRY_RN]==FALSE)) THEN
+      $TECH_C[A_FG_MECH2].FCTCTRL.SCALE_IN=A_W_PARA_ACT.WEAVLEN_MECH
+      $TECH_C[A_FG_MECH2].FCTCTRL.SCALE_OUT=A_W_PARA_ACT.WEAVAMP_MECH
+
+      IF A_HPU_DRY_RN==#IDLE THEN
+        IF (SEN_PARA_ACT.STS<>#ACTIVE) THEN
+          $TECH_C[A_FG_MECH2].MODE=#CYCLE
+        ELSE
+          $TECH_C[A_FG_MECH2].MODE=#OFF
+        ENDIF
+      ELSE
+        $TECH_C[A_FG_MECH2].MODE=#OFF
+      ENDIF
+    ELSE
+      $TECH_C[A_FG_MECH2].MODE=#OFF
+    ENDIF
+  ELSE
+    $TECH_C[A_FG_MECH2].MODE=#OFF
+  ENDIF
+
+END ;(I_FG_MECH_ON)
+;---------------------------------
+; switch on thermical weaving in
+; ARC_ON command as interrupt call
+;---------------------------------
+DEF  I_FG_THRM_ON ( )
+
+  IF ((A_FG_THERM>0) AND (SEN_PARA_ACT.STS==#IDLE)) THEN
+    IF ((A_W_PARA_ACT.WEAVLEN_THER>0) AND (A_W_PARA_ACT.WEAVFIG_THER>0) AND (A50_OPTION==#DISABLED)) THEN
+      $TECH_C[A_FG_THERM].FCTCTRL.SCALE_IN=A_W_PARA_ACT.WEAVLEN_THER
+      $TECH_C[A_FG_THERM].MODE=#CYCLE
+    ELSE
+      $TECH_C[A_FG_THERM].MODE=#OFF
+    ENDIF
+  ENDIF
+
+END ;(I_FG_THRM_ON)
+;--------------------
+; restore of movement 
+; parameters
+;--------------------
+DEF  RESTORE_MOVM ( )
+
+  INT N
+
+  $FILTER=A_FILTER_OLD
+  FOR N=1 TO  $EX_AX_NUM
+    $ACC_EXTAX[N]=A_AC_EXT_OLD[N]
+  ENDFOR
+
+END ;(RESTORE_MOVM)
+;--------------------
+; Burnfree subroutine
+;--------------------
+DEF  PRE_BRN_FREE (ARC_MODE :IN )
+
+  DECL A_ANA_SET_T8 A_BRNFREEDAT
+  INT ARC_MODE
+
+  A_BRNFREEDAT.CH1=A_BRN_FREE.CH1
+  A_BRNFREEDAT.CH2=A_BRN_FREE.CH2
+  A_BRNFREEDAT.CH3=A_BRN_FREE.CH3
+  A_BRNFREEDAT.CH4=A_BRN_FREE.CH4
+  A_BRNFREEDAT.CH5=A_BRN_FREE.CH5
+  A_BRNFREEDAT.CH6=A_BRN_FREE.CH6
+  A_BRNFREEDAT.CH7=A_BRN_FREE.CH7
+  A_BRNFREEDAT.CH8=A_BRN_FREE.CH8
+  PREP_ANOUTS (A_BRNFREEDAT,0.0,0.0,#BRN_FREE,ARC_MODE )
+
+END ;(PRE_BRN_FREE)
+;----------------------------------
+; Switching off function generators
+;----------------------------------
+DEF  FG_OFF ( )
+
+  $TECH[A_FG_MECH1].MODE=#OFF
+  $TECH[A_FG_MECH2].MODE=#OFF
+
+  IF A_FG_THERM>0 THEN
+    $TECH[A_FG_THERM].MODE=#OFF
+  ENDIF
+
+END ;(FG_OFF)
+;----------------------------------
+; Switching off function generators
+;----------------------------------
+DEF  I_FG_OFF ( )
+
+  $TECH_C[A_FG_MECH1].MODE=#OFF
+  $TECH_C[A_FG_MECH2].MODE=#OFF
+
+  IF A_FG_THERM>0 THEN
+    $TECH_C[A_FG_THERM].MODE=#OFF
+  ENDIF
+
+END ;(I_FG_OFF)
+;------------------------------
+; Spike Supression 
+; Trigger at $CYCFLAG[2]==FALSE
+; 2nd check only within a seam
+;------------------------------
+DEFFCT  BOOL SEAM_ERR()
+
+  INTERRUPT OFF 4
+
+  IF A_SWINDL_OPT==#ACTIVE THEN
+    WAIT SEC A_SWINDL_TIM
+    IF (($CYCFLAG[2]==FALSE) AND (A_WLD_ACTIV==#ACTIVE))  THEN
+      IF (($CYCFLAG[2]==FALSE) AND (A_WLD_ACTIV==#ACTIVE))  THEN
+        BRAKE
+        RETURN  (TRUE)
+      ELSE
+        INTERRUPT ON 4
+        RETURN  (FALSE)
+      ENDIF
+    ELSE
+      WAIT SEC 0.15
+      INTERRUPT ON 4
+      RETURN  (FALSE)
+    ENDIF
+  ELSE
+    IF ($CYCFLAG[2]==FALSE) THEN
+      BRAKE
+      RETURN  (TRUE)
+    ELSE
+      INTERRUPT ON 4
+      RETURN  (FALSE)
+    ENDIF
+  ENDIF
+ENDFCT ;(SEAM_ERR)
+;--------------------------
+; testing SUBMIT is running
+;--------------------------
+DEF  SPS_RUN (PROG_SPS[] :OUT,ANZAHL :IN )
+
+  DECL INT I,OFFSET,ANZAHL,ANZAHL2
+  DECL BOOL MERKER
+  DECL STATE_T STATE
+  DECL CHAR PROG_SPS[]
+  DECL CHAR NAME_SPS[8]
+
+  LOOP
+    OFFSET=0
+    MERKER=FALSE
+    IF ($PRO_STATE0==#P_ACTIVE) AND (A10_OPTION==#ACTIVE) THEN
+      CONTINUE
+      SREAD($PRO_NAME0[],STATE,OFFSET,"%s",NAME_SPS[])
+      ANZAHL2=STATE.LENGTH
+      IF ANZAHL==ANZAHL2 THEN
+        FOR I=1 TO  ANZAHL
+          IF NAME_SPS[I]<>PROG_SPS[I] THEN
+            MERKER=TRUE
+            EXIT
+          ENDIF
+        ENDFOR
+        IF MERKER==FALSE THEN
+          RETURN 
+        ENDIF
+      ENDIF
+    ENDIF
+    MESS_DLG (MISS_SUB )
+  ENDLOOP
+
+END ;(SPS_RUN)
+;--------------------------------------
+; Save OVERRIDE in ONLINE OPTIMIZE Mode
+;--------------------------------------
+DEF  SAFE_OVR ( )
+
+  IF SAVE_OVR==(-1) THEN
+    SAVE_OVR=$OV_PRO
+  ENDIF
+
+END ; (SAFE_OVR)
+;-----------------
+; RESTORE OVERRIDE
+;-----------------
+DEF  RESTORE_OVR ( )
+
+  IF SAVE_OVR<>(-1) THEN
+    IF ($EDIT_MODE==2) THEN
+      $OV_PRO=SAVE_OVR
+    ENDIF
+    SAVE_OVR=(-1)
+  ENDIF
+
+END ; (RESTORE_OVR)
+;--------------------------------
+; Ramp functionality after ARC_ON
+;--------------------------------
+DEF  START_RAMP ( )
+
+  REAL DELTA[2],SUM[2]
+
+  IF A_FIFO_WLD_P[1].ANA8==0.0 THEN
+    A_FIFO_WLD_P[1].ANA8=0.1
+  ENDIF
+
+  IF A_FG_THERM>0 THEN
+    A_TH1_ACT_G=A_TH_FIFO[1].GAIN1
+    A_TH2_ACT_G=A_TH_FIFO[1].GAIN2
+    DELTA[1]=A_TH_FIFO[1].OFS1-A_STRT_PAR[1]
+    DELTA[2]=A_TH_FIFO[1].OFS2-A_STRT_PAR[2]
+  ELSE
+    DELTA[1]=A_W_PAR_FIFO[1].CH1-A_STRT_PAR[1]
+    DELTA[2]=A_W_PAR_FIFO[1].CH2-A_STRT_PAR[2]
+  ENDIF
+
+  REPEAT
+
+    SUM[1]=A_STRT_PAR[1]+DELTA[1]*$DISTANCE/A_FIFO_WLD_P[1].ANA8
+    SUM[2]=A_STRT_PAR[2]+DELTA[2]*$DISTANCE/A_FIFO_WLD_P[1].ANA8
+
+    IF SUM[1] > 1.0 THEN
+      SUM[1]=1.0
+    ENDIF
+
+    IF SUM[2] > 1.0 THEN
+      SUM[2]=1.0
+    ENDIF
+
+    IF A_FG_THERM>0 THEN
+
+      IF ($DISTANCE/A_FIFO_WLD_P[1].ANA8)>1.0 THEN
+        A_TH1_ACT_O=A_TH_FIFO[1].OFS1
+        A_TH2_ACT_O=A_TH_FIFO[1].OFS2
+      ELSE
+        
+        IF A_W_PARA_ACT.WEAVFIG_THER > 0 THEN
+
+          IF  ((SUM[1] + A_TH1_ACT_G*$TECHVAL[A_FG_THERM]) > 0.99)  THEN
+            A_TH1_ACT_O=(0.99- A_TH1_ACT_G*$TECHVAL[A_FG_THERM])
+          ELSE
+            A_TH1_ACT_O=SUM[1]
+          ENDIF
+          IF  ((SUM[2] +  A_TH2_ACT_G*$TECHVAL[A_FG_THERM]) > 0.99 ) THEN
+            A_TH2_ACT_O=(0.99- A_TH2_ACT_G*$TECHVAL[A_FG_THERM])
+          ELSE
+            A_TH2_ACT_O=SUM[2]
+          ENDIF
+
+        ELSE
+
+          IF  ((SUM[1] +  A_TH1_ACT_G) > 0.99)  THEN
+            A_TH1_ACT_O=(0.99- A_TH1_ACT_G )
+          ELSE
+            A_TH1_ACT_O=SUM[1]
+          ENDIF
+          IF  ((SUM[2] +  A_TH2_ACT_G) > 0.99 ) THEN
+            A_TH2_ACT_O=(0.99- A_TH2_ACT_G )
+          ELSE
+            A_TH2_ACT_O=SUM[2]
+          ENDIF
+
+        ENDIF
+        
+      ENDIF
+
+    ELSE
+
+      IF ($DISTANCE/A_FIFO_WLD_P[1].ANA8)>1.0 THEN
+        $ANOUT[A_ANAOUT_NO[1]]=A_W_PAR_FIFO[1].CH1
+        $ANOUT[A_ANAOUT_NO[2]]=A_W_PAR_FIFO[1].CH2
+      ELSE
+        $ANOUT[A_ANAOUT_NO[1]]=SUM[1]
+        $ANOUT[A_ANAOUT_NO[2]]=SUM[2]
+      ENDIF
+
+    ENDIF
+
+  UNTIL ( (($DISTANCE/A_FIFO_WLD_P[1].ANA8)>1.0) OR ($DIST_NEXT > (-0.3)) )
+
+END ; (START_RAMP )
+;-------------------
+; Ramp at non ARC_ON
+;-------------------
+DEF  SECTION_RAMP ( )
+
+  REAL DELTA[2],SUM[2]
+  REAL FIX_IT,TMP_DISTC
+
+  IF ((A_FIFO_READ <= A_FIFO_MAX) AND (A_FIFO_READ >0)) THEN
+    TMP_DISTC= A_FIFO_WLD_P[A_FIFO_READ].ANA8
+  ELSE
+    TMP_DISTC= A_FIFO_WLD_P[1].ANA8
+  ENDIF
+
+  IF TMP_DISTC==0.0 THEN
+    TMP_DISTC=0.1
+  ENDIF
+
+  FIX_IT=$DISTANCE
+
+  IF A_FG_THERM>0 THEN
+
+    A_TH1_ACT_G=A_TH_FIFO[A_FIFO_READ].GAIN1
+    A_TH2_ACT_G=A_TH_FIFO[A_FIFO_READ].GAIN2
+
+    IF ((A_FIFO_READ<=A_FIFO_MAX) AND (A_FIFO_READ>1)) THEN
+      DELTA[1]=A_TH_FIFO[A_FIFO_READ].OFS1-A_TH_FIFO[A_FIFO_READ-1].OFS1
+      DELTA[2]=A_TH_FIFO[A_FIFO_READ].OFS2-A_TH_FIFO[A_FIFO_READ-1].OFS2
+    ELSE
+      DELTA[1]=A_TH_FIFO[1].OFS1-A_TH_FIFO[A_FIFO_MAX].OFS1
+      DELTA[2]=A_TH_FIFO[1].OFS2-A_TH_FIFO[A_FIFO_MAX].OFS2
+    ENDIF
+
+  ELSE
+
+    IF ((A_FIFO_READ<=A_FIFO_MAX) AND (A_FIFO_READ>1)) THEN
+      DELTA[1]=A_W_PAR_FIFO[A_FIFO_READ].CH1-A_W_PAR_FIFO[A_FIFO_READ-1].CH1
+      DELTA[2]=A_W_PAR_FIFO[A_FIFO_READ].CH2-A_W_PAR_FIFO[A_FIFO_READ-1].CH2
+    ELSE
+      DELTA[1]=A_W_PAR_FIFO[1].CH1-A_W_PAR_FIFO[A_FIFO_MAX].CH1
+      DELTA[2]=A_W_PAR_FIFO[1].CH2-A_W_PAR_FIFO[A_FIFO_MAX].CH2
+    ENDIF
+
+  ENDIF
+
+  REPEAT
+
+    IF A_FG_THERM>0 THEN
+
+      IF A_FIFO_READ>1 THEN
+        SUM[1]=A_TH_FIFO[A_FIFO_READ-1].OFS1+DELTA[1]*($DISTANCE-FIX_IT)/TMP_DISTC
+        SUM[2]=A_TH_FIFO[A_FIFO_READ-1].OFS2+DELTA[2]*($DISTANCE-FIX_IT)/TMP_DISTC
+      ELSE
+        SUM[1]=A_TH_FIFO[A_FIFO_MAX].OFS1+DELTA[1]*($DISTANCE-FIX_IT)/TMP_DISTC
+        SUM[2]=A_TH_FIFO[A_FIFO_MAX].OFS2+DELTA[2]*($DISTANCE-FIX_IT)/TMP_DISTC
+      ENDIF
+
+      IF SUM[1] > 1.0 THEN
+        SUM[1]=1.0
+      ENDIF
+
+      IF SUM[2] > 1.0 THEN
+        SUM[2]=1.0
+      ENDIF
+
+      IF (($DISTANCE-FIX_IT)/TMP_DISTC)<1.0 THEN
+
+        IF A_W_PARA_ACT.WEAVFIG_THER > 0 THEN
+
+          IF  ((SUM[1] +  A_TH1_ACT_G*$TECHVAL[A_FG_THERM]) > 0.99)  THEN
+            A_TH1_ACT_O=(0.99- A_TH1_ACT_G*$TECHVAL[A_FG_THERM])
+          ELSE
+            A_TH1_ACT_O=SUM[1]
+          ENDIF
+          IF  ((SUM[2] +  A_TH2_ACT_G*$TECHVAL[A_FG_THERM]) > 0.99 ) THEN
+            A_TH2_ACT_O=(0.99- A_TH2_ACT_G*$TECHVAL[A_FG_THERM])
+          ELSE
+            A_TH2_ACT_O=SUM[2]
+          ENDIF
+
+        ELSE
+
+          IF  ((SUM[1] +  A_TH1_ACT_G) > 0.99)  THEN
+            A_TH1_ACT_O=(0.99- A_TH1_ACT_G )
+          ELSE
+            A_TH1_ACT_O=SUM[1]
+          ENDIF
+          IF  ((SUM[2] +  A_TH2_ACT_G) > 0.99 ) THEN
+            A_TH2_ACT_O=(0.99- A_TH2_ACT_G )
+          ELSE
+            A_TH2_ACT_O=SUM[2]
+          ENDIF
+
+        ENDIF
+
+      ENDIF
+
+    ELSE
+
+      IF A_FIFO_READ>1 THEN
+        SUM[1]=A_W_PAR_FIFO[A_FIFO_READ-1].CH1+DELTA[1]*($DISTANCE-FIX_IT)/TMP_DISTC
+        SUM[2]=A_W_PAR_FIFO[A_FIFO_READ-1].CH2+DELTA[2]*($DISTANCE-FIX_IT)/TMP_DISTC
+      ELSE
+        SUM[1]=A_W_PAR_FIFO[A_FIFO_MAX].CH1+DELTA[1]*($DISTANCE-FIX_IT)/TMP_DISTC
+        SUM[2]=A_W_PAR_FIFO[A_FIFO_MAX].CH2+DELTA[2]*($DISTANCE-FIX_IT)/TMP_DISTC
+      ENDIF
+
+      IF SUM[1] > 1.0 THEN
+        SUM[1]=1.0
+      ENDIF
+
+      IF SUM[2] > 1.0 THEN
+        SUM[2]=1.0
+      ENDIF
+
+      IF (($DISTANCE-FIX_IT)/TMP_DISTC)<1.0 THEN
+        $ANOUT[A_ANAOUT_NO[1]]=SUM[1]
+        $ANOUT[A_ANAOUT_NO[2]]=SUM[2]
+      ENDIF
+
+    ENDIF
+
+  UNTIL (( (($DISTANCE-FIX_IT)/TMP_DISTC)>1.0) OR ($DIST_NEXT > (-0.3)) )
+
+END ; (SECTION_RAMP)
+;-----------------------------------------
+; Reduces Voltage and set Wirefeed to zero
+; Activate static channels in TECHSTOP
+;-----------------------------------------
+DEF  BB_REDUCE ( )
+
+  IF ((A_WEAV_GEN[3]==0) OR (A_SPS_ACTION==#ACTIVE)) THEN
+    $ANOUT[A_ANAOUT_NO[2]]=0.0
+    $ANOUT[A_ANAOUT_NO[1]]=$ANOUT[A_ANAOUT_NO[1]]*A_REDUCE
+  ELSE
+    A_TH2_ACT_O=0.0 ;Wirefeed value to zero
+    A_TH2_ACT_G=0.0
+    A_TH1_ACT_O=A_TH1_ACT_O*A_REDUCE ;Reduce voltage
+    A_TH1_ACT_G=0.0
+  ENDIF
+
+END ; (BB_REDUCE)
+;-------------------------
+;  Subroutine for messages
+;-------------------------
+DEF  MESS_DLG (MESS_T :OUT )
+
+  DECL MSG_T MESS_T
+
+  $MSG_T=MESS_T
+  $MSG_T.VALID=TRUE
+
+  IF $MSG_T.TYP<>#NOTIFY THEN
+    HALT
+    $MSG_T.RELEASE=TRUE
+  ENDIF
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.15
+  ENDWHILE
+  WAIT SEC 0.2
+  $MSG_T=EMPTY_MSG
+
+END ;(MESS_DLG)
+;-------------------------------
+;  Subroutine for start messages
+;-------------------------------
+DEF  MSG_START ( )
+
+  OFFSET=0
+  $MSG_T=NO_CUR_REPAT
+  SWRITE($MSG_T.PARAM[],STATE,OFFSET,"%d",RETRY_COUNT)
+  $MSG_T.VALID=TRUE
+
+  IF $MSG_T.TYP==#STATE THEN
+    WAIT SEC 1.5
+    $MSG_T.RELEASE=TRUE
+    WAIT SEC 0.3
+  ENDIF
+
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.15
+  ENDWHILE
+
+  WAIT SEC 0.3
+  $MSG_T=EMPTY_MSG
+
+END ;(MSG_START)
+;---------------------
+;  Switch OFF weavings
+;---------------------
+DEF  CANCEL_WEAVE ( )
+
+  IF $TECH_C[A_FG_MECH1].MODE==#CYCLE THEN
+    STS_FG1=TRUE
+  ELSE
+    STS_FG1=FALSE
+  ENDIF
+  $TECH_C[A_FG_MECH1].MODE=#OFF
+
+  IF $TECH_C[A_FG_MECH2].MODE==#CYCLE THEN
+    STS_FG2=TRUE
+  ELSE
+    STS_FG2=FALSE
+  ENDIF
+  $TECH_C[A_FG_MECH2].MODE=#OFF
+
+  IF A_FG_SENSOR>0 THEN
+    IF $TECH_C[A_FG_SENSOR].MODE==#CYCLE THEN
+      STS_TAST=TRUE
+    ELSE
+      STS_TAST=FALSE
+    ENDIF
+    $TECH_C[A_FG_SENSOR].MODE=#SINGLE
+  ENDIF
+
+END ;(CANCEL_WEAVE )
+;----------------------------------
+; Switch ON by saved weaving states
+;----------------------------------
+DEF  COLD_WEAV_ON ( )
+
+  IF ((TECH_MOTION==TRUE) AND ($MOVE_BCO==FALSE) AND ($ON_PATH==TRUE)) THEN
+    IF ((STS_TAST==TRUE) AND (A_FG_SENSOR>0)) THEN
+      STS_TAST=FALSE
+      $TECH_C[A_FG_SENSOR].MODE=#CYCLE
+    ENDIF
+
+    IF STS_FG1==TRUE THEN
+      STS_FG1=FALSE
+      $TECH_C[A_FG_MECH1].MODE=#CYCLE
+    ENDIF
+
+    IF STS_FG2==TRUE THEN
+      STS_FG2=FALSE
+      $TECH_C[A_FG_MECH2].MODE=#CYCLE
+    ENDIF
+  ENDIF
+
+END ;(COLD_WEAV_ON )
+;------------------------------
+; Switch OFF Burnback procedure
+;------------------------------
+DEF  BURNBACK_SUB ( )
+
+  IF HIDE_BB_TIME==FALSE THEN
+    WAIT SEC (A_W_PARA_ACT.BURNBACK_T)
+  ENDIF
+
+  IF ((A_HOT_WELD==#ACTIVE) AND (A_WLD_ACTIV==#ACTIVE)) THEN
+    SET_BIN_GRP (A_O_SEAM_END[],#ADV_STOP)
+  ELSE
+    A_FAST_RESET_BIN_GRP (A_O_SEAM_END[])
+  ENDIF
+
+  A_WLD_ACTIV=#IDLE
+
+  IF ((A_HOT_WELD==#ACTIVE) AND (A_GAS_FLOW==#ACTIVE)) THEN
+    SET_BIN_GRP (A_O_POST_OFF[],#FINAL_STS )
+  ENDIF
+
+END ;(BURNBACK_SUB)
+;------------
+; Decide ramp 
+;------------
+DEF  DEF2_CHANNEL ( )
+
+  IF A_FG_THERM>0 THEN ; variables have directly influence to weaving
+    A_TH1_ACT_G=A_TH_FIFO[A_FIFO_READ].GAIN1
+    A_TH1_ACT_O=A_TH_FIFO[A_FIFO_READ].OFS1
+    A_TH2_ACT_G=A_TH_FIFO[A_FIFO_READ].GAIN2
+    A_TH2_ACT_O=A_TH_FIFO[A_FIFO_READ].OFS2
+  ELSE
+    $ANOUT[A_ANAOUT_NO[1]]=A_W_PAR_FIFO[A_FIFO_READ].CH1
+    $ANOUT[A_ANAOUT_NO[2]]=A_W_PAR_FIFO[A_FIFO_READ].CH2
+  ENDIF
+
+END ;(DEF2_CHANNEL)
+
+;----------------------------------
+; WAIT_FOR_ONE_SIGNAL WITH TIME_OUT
+;----------------------------------
+DEFFCT  BOOL WAI_INP1(INP1:OUT)
+
+  DECL FCT_IN_T INP1
+  INT TIME_LIMIT,TEMP
+
+  A_COUNTER = 0
+  TIME_LIMIT= A_TIME_OUT1*10/12
+
+  TEMP=INP1.NO
+  IF INP1.NO > 0 THEN    
+    IF A_WLD_IN[TEMP].IN_NR > 0 THEN
+      CONTINUE
+      WHILE (($IN[A_WLD_IN[TEMP].IN_NR] <> INP1.STATE ) AND (A_COUNTER <= TIME_LIMIT)) 
+        A_COUNTER = A_COUNTER+1
+        CONTINUE 
+        WAIT SEC 0.012
+        CONTINUE
+      ENDWHILE
+      IF (A_COUNTER >= TIME_LIMIT) THEN
+        RETURN(FALSE)
+      ELSE
+        RETURN(TRUE)
+      ENDIF
+    ELSE
+      RETURN(TRUE)
+    ENDIF
+  ELSE
+    RETURN(TRUE)
+  ENDIF
+
+  ENDFCT; (WAI_INP1)
+  ;-----------------------------
+  ; Set correct Weave Angle
+  ;-----------------------------
+  DEF SET_MECH_WEAVE_ANGLE (ANGLE:IN)
+
+    REAL ANGLE
+
+    IF (ABS(ANGLE) >= 179.999) THEN
+
+      IF (ANGLE> 0)  THEN
+        $TECHANGLE.C=  179.99
+      ELSE
+        $TECHANGLE.C= -179.99
+      ENDIF
+
+    ELSE
+      $TECHANGLE.C=ANGLE
+    ENDIF
+
+  END ;(SET_MECH_WEAVE_ANGLE )
+  
+  

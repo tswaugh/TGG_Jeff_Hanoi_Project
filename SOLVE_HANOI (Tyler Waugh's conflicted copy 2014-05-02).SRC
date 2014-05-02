@@ -1,0 +1,157 @@
+DEF SOLVE_HANOI()
+
+;------- Declaration section --------
+EXT BAS (BAS_COMMAND :IN,REAL :IN )
+DECL INT FROM_TOWER , USING_TOWER , TO_TOWER, NEXT_INDEX, I
+DECL AXIS HOME
+
+;---------- Initialization ----------
+; Set the Max velocities and accelerations
+; set to 10 now for initial testing and setup
+; once positions and logic are confirmed correct 100 should be safe
+FOR I=1 TO 6
+$VEL_AXIS[I]=10
+$ACC_AXIS[I]=10
+ENDFOR
+
+; TODO: Modify $TOOL so that the center point is where we want tower center to be when picking up disks
+
+HOME={AXIS: A1 0, A2 -90, A3 90, A4 0, A5 0, A6 0}
+
+FROM_TOWER = 1
+USING_TOWER = 2
+TO_TOWER = 3
+NEXT_INDEX = 1
+
+;----------- Main section ----------
+PTP HOME ; BCO run - setup for movements
+
+MOVE_TOWER(HANOI_DISK_COUNT,FROM_TOWER,USING_TOWER,TO_TOWER,MOVE_MATRIX[,],NEXT_INDEX)
+
+; Sanity check
+IF NEXT_INDEX <> REQUIRED_MOVES + 1 THEN
+HALT
+ELSE
+ENDIF 
+
+PTP HOME ; Back safe and sound.
+
+END ;Main program END
+
+
+; ------------EXECUTE_SOLUTION()------------
+; EXECUTE_SOLUTION will execute the disk movements in MOVE_MATRIX
+DEF EXECUTE_SOLUTION(MOVE_MATRIX[,]:IN)
+
+DECL INT MOVE_MATRIX[,]
+DECL INT DISK_COUNTS[3]
+DECL INT I,CURR_FROM,CURR_TO
+DECL REAL FROM_NEXT_DISK_Z, TO_NEXT_DISK_Z
+
+DECL POS TOWER_BASES[3]
+DECL POS TABLE, TOWER_ONE_BASE_REL, TOWER_TWO_BASE_REL, TOWER_THREE_BASE_REL, TRANSIT_OFFSET, PICK_UP_OFFSET, FROM_DISK_Z_OFFSET, TO_DISK_Z_OFFSET
+
+DISK_COUNTS[1] = HANOI_DISK_COUNT
+DISK_COUNTS[2] = 0
+DISK_COUNTS[3] = 0
+
+; Create the position vectors we'll use throughout executing the solution
+TABLE = {POS: X TABLE_X, Y TABLE_Y, Z TABLE_Z, A 0 , B 0 , C 0}
+; Tower bases are relative to the table base
+TOWER_ONE_BASE_REL = {POS: X TOWER_ONE_X, Y TOWER_ONE_Y, Z TOWER_ONE_Z, A 0 , B 0 , C 0}
+TOWER_TWO_BASE_REL = {POS: X TOWER_TWO_X, Y TOWER_TWO_Y, Z TOWER_TWO_Z, A 0 , B 0 , C 0}
+TOWER_THREE_BASE_REL = {POS: X TOWER_THREE_X, Y TOWER_THREE_Y, Z TOWER_THREE_Z, A 0 , B 0 , C 0}
+
+; Pickup zone relative vector
+PICK_UP_OFFSET = {POS: X PICK_UP_X_OFFSET, Y 0, Z 0, A 0 , B 0 , C 0}
+; Transit zone relative vector
+TRANSIT_OFFSET = {POS: X 0, Y 0, Z TRANSIT_ZONE_Y_OFFSET, A 0 , B 0 , C 0}
+
+; Absolute tower positions
+TOWER_BASES[1] = TABLE:TOWER_ONE_BASE_REL
+TOWER_BASES[2] = TABLE:TOWER_TWO_BASE_REL
+TOWER_BASES[3] = TABLE:TOWER_THREE_BASE_REL
+
+; ------MAIN EXEC LOOP------
+; Execute solution
+FOR I = 1 to REQUIRED_MOVES
+; Initialize current to and from tower
+CURR_FROM = MOVE_MATRIX[I,1]
+CURR_TO = MOVE_MATRIX[I,2]
+
+FROM_NEXT_DISK_Z = DISK_COUNTS[CURR_FROM] * DISK_THICKNESS - DISK_PICKUP_OFFSET
+TO_NEXT_DISK_Z = DISK_COUNTS[CURR_TO] * DISK_THICKNESS - DISK_PICKUP_OFFSET
+
+FROM_DISK_Z_OFFSET = {POS: X 0, Y 0, Z FROM_NEXT_DISK_Z, A 0 , B 0 , C 0}
+TO_DISK_Z_OFFSET = {POS: X 0, Y 0, Z TO_NEXT_DISK_Z, A 0 , B 0 , C 0}
+
+; Check if from tower has  >= 1 disks on it and that to tower has positive number of disks (SANITY CHECK)
+IF DISK_COUNTS[CURR_FROM] < 1 THEN
+HALT
+ELSE
+ENDIF
+
+IF DISK_COUNTS[CURR_TO]  < 0 THEN
+HALT
+ELSE
+ENDIF
+
+CURR_FROM_BASE = TOWER_BASES[CURR_FROM]
+CURR_TO_BASE = TOWER_BASES[CURR_TO]
+
+; TODO: Execute 6 steps to move disk and prep for next cycle
+; Move to the pickup zone and align with next disk to pickup
+LIN CURR_FROM_BASE:PICK_UP_OFFSET
+
+
+;Move to tower center offset up by currdisk offset
+LIN CURR_FROM_BASE:FROM_DISK_Z_OFFSET
+
+; Move up to transit zone
+LIN CURR_FROM_BASE:TRANSIT_OFFSET
+
+; Align with to tower in transit zone
+LIN CURR_TO_BASE:TRANSIT_OFFSET
+
+; Lower to tower base + disk offset
+LIN CURR_TO_BASE:TO_DISK_Z_OFFSET
+
+; Retract into pickup zone
+LIN CURR_TO_BASE:PICK_UP_OFFSET
+
+; TODO: Change disk counts for from and to towers
+DISK_COUNTS[CURR_TO] = DISK_COUNTS[CURR_TO] + 1
+DISK_COUNTS[CURR_FROM] = DISK_COUNTS[CURR_FROM] - 1
+ENDFOR ;End cycle loop
+END ;Execute solution end
+
+
+DEFFCT INT MOVETOWER(DNUM:IN , FROM_TOWER:IN , USING_TOWER:IN , TO_TOWER:IN , MOVE_MATRIX[,] :OUT , NEXT_INDEX:OUT)
+; Not entirely sure if we need these declarations
+DECL INT DNUM , FROM_TOWER , USING_TOWER , TO_TOWER , NEXT_INDEX
+; Define MOVE_MAT again. It must be done.
+DECL INT MOVE_MAT[,]
+
+; Recurssion base case
+IF DNUM == 0 THEN
+
+RETURN(1)
+
+ELSE
+
+; Temporarily move ecerything on top of the FROM_TOWER except the last disk to the USING_TOWER
+MOVETOWER(DNUM - 1 , FROM_TOWER , TO_TOWER , USING_TOWER , MOVE_MATRIX[,] , NEXT_INDEX)
+
+; Move the bottom disk to the TO_TOWER
+MOVE_MATRIX[NEXT_INDEX,1] = FROM_TOWER
+MOVE_MATRIX[NEXT_INDEX,2] = TO_TOWER
+NEXT_INDEX = NEXT_INDEX + 1
+
+; Move the temporary stack from step 1 to the TO_TOWER
+MOVETOWER(DNUM - 1 , USING_TOWER , FROM_TOWER , TO_TOWER , MOVE_MATRIX[,] , NEXT_INDEX)
+
+ENDIF
+
+RETURN(1)
+
+ENDFCT ;Movetower end

@@ -1,0 +1,127 @@
+&COMMENT User defined Error strategies
+DEF  FLT_SERV (RETRY_WELD :IN,ARC_ON_FLT :IN )
+  ;*************************************
+  ; User defined Fault service routines
+  ; Variables A_FLT_SC_FCT and
+  ; A_RESTRT_OPT=#USR_SEAM
+  ; Programming in Expert level
+  ;  ";BAS" - Subroutine-Call as support 
+  ;*************************************
+  DECL A_BOOL_T RETRY_WELD,ARC_ON_FLT
+  E6POS POS_RET
+
+  ;    BAS (#INITMOV,0);INITMOV only for testing
+
+  PTP  $POS_ACT
+  POS_RET=$POS_RET
+
+  SWITCH  A_FLT_SV_FCT
+
+    ;===========================================
+    ;  FAULT SERVICE FUNCTION (additional START-Error )
+    ;===========================================
+
+  CASE 0
+
+    IF A10_OPTION ==#ACTIVE THEN
+      IF ARC_ON_FLT==#ACTIVE THEN
+        MOVE_TCP ({X -20.0,Y 0.001,Z 0.001} )
+        IF ((RETRY_COUNT< MAX_RETRY) OR (A_S_ERR_OPT<>#USR_START)) THEN
+          MOVE_TCP ({X 20.0,Y -0.001,Z -0.001} )
+        ENDIF
+      ELSE
+        MOVE_TCP ({X -20.0,Y 0.001,Z 0.001} )
+      ENDIF
+    ENDIF
+
+    IF ARC20 THEN
+      IF ARC_ON_FLT==#ACTIVE THEN
+        INTERRUPT  OFF 3 ; IR_STOPMESS()
+        MOVE_TCP ({X -100.0,Y 1.0,Z 1.0} )
+        LIN  POS_RET
+        INTERRUPT  ON 3
+      ELSE
+        MOVE_TCP ({X -50.0,Y 1.0,Z 1.0} )
+        HALT
+        LIN  POS_RET
+      ENDIF
+    ENDIF
+
+    ;==================================
+    ;  FAULT SERVICE FUNCTION 1
+    ;==================================
+  CASE 1
+    ;example !!
+    ;MOVE_TCP ({X -100.0000,Y 0.0,Z 0.0} )
+    ;PTP_REL  {A2 10.00000}
+    ;PTP  SERVICE
+    ;HALT
+    ;PTP  P1
+    ;LIN  POS_RET
+
+    ;==================================
+    ;  FAULT SERVICE FUNCTION 2
+    ;==================================
+  CASE 2
+    ;example !!
+    ;LIN_REL  {Z 100}
+    ;PTP  P2
+    ;PTP  SERVICE
+    ;HALT
+    ;PTP  P3
+    ;LIN  POS_RET
+
+    ;==================================
+    ;  FAULT SERVICE FUNCTION 3
+    ;==================================
+  CASE 3
+    ;example !!
+    ;LIN  P4
+    ;PTP  P5
+    ;PTP  SERVICE
+    ;HALT
+    ;PTP  P6
+    ;LIN  POS_RET
+
+    ;==================================
+    ;  FAULT SERVICE FUNCTION 4
+    ;==================================
+  CASE 4
+    ;example !!
+    ;LIN  P7
+    ;PTP  P8
+    ;PTP  SERVICE
+    ;HALT
+    ;PTP  P9
+    ;LIN  POS_RET
+
+    ;==================================
+    ;  FAULT SERVICE FUNCTION 5
+    ;==================================
+  CASE 5
+    ;example !!
+    ;RETRY_WELD=FALSE
+    ;LIN  POS_RET
+
+  DEFAULT
+    ; no action for not defined functions
+
+  ENDSWITCH
+
+END
+
+;*****************
+; local subroutine
+;*****************
+DEF  MOVE_TCP (TCP_IN :IN )
+
+  DECL TCP_TYP TCP_IN
+
+  F=$NULLFRAME
+  F.X=TCP_IN.X
+  F.Y=TCP_IN.Y
+  F.Z=TCP_IN.Z
+
+  LIN  $POS_ACT:F
+
+END

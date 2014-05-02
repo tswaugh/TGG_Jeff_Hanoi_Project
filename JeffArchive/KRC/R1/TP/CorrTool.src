@@ -1,0 +1,177 @@
+&ACCESS RV
+&COMMENT tool correction program
+DEF  CorrTool (TOOL_NO :IN )
+  ;FOLD INI {H}
+  INT TOOL_NO
+  CorrToolNo=TOOL_NO
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TOOLCOR",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  WHILE  $MODE_OP<>#T1
+    MESS (5,1 )
+  ENDWHILE
+  INTERRUPT DECL 1 WHEN CHECK_FLAG DO INTER_1 ( )
+  INTERRUPT  ON 1
+  BAS (#INITMOV,0 )
+  CHK_T_NO ( )
+  ;ENDFOLD
+  ;FOLD Movement to REF_PT
+  ;ENDFOLD
+  ;FOLD PTP P1  Vel= 100 % PDAT1 Tool:0 Base:0;%{PE}%R 3.2.15,%MKUKATPBASIS,%CMOVE,%VPTP,%P 1:PTP, 2:P1, 3:, 5:100, 7:PDAT1
+  PDAT_ACT=PPDAT1
+  BAS(#PTP_DAT)
+  FDAT_ACT=FP1
+  BAS(#FRAMES)
+  BAS(#VEL_PTP,100)
+  PTP XP1 
+  ;ENDFOLD
+  ;FOLD PTP P2  Vel= 100 % PDAT2 Tool:0 Base:0;%{PE}%R 3.2.15,%MKUKATPBASIS,%CMOVE,%VPTP,%P 1:PTP, 2:P2, 3:, 5:100, 7:PDAT2
+  PDAT_ACT=PPDAT2
+  BAS(#PTP_DAT)
+  FDAT_ACT=FP2
+  BAS(#FRAMES)
+  BAS(#VEL_PTP,100)
+  PTP XP2 
+  ;ENDFOLD
+
+  ;FOLD Executing motion to reference point
+  TRIGGER WHEN DISTANCE=1 DELAY=-0.01 DO CHECK_FLAG=TRUE
+  GO_REF ( )
+  ;ENDFOLD
+
+  ;FOLD PTP P3  Vel= 100 % PDAT3 Tool:0 Base:0;%{PE}%R 3.2.15,%MKUKATPBASIS,%CMOVE,%VPTP,%P 1:PTP, 2:P3, 3:, 5:100, 7:PDAT3
+  PDAT_ACT=PPDAT3
+  BAS(#PTP_DAT)
+  FDAT_ACT=FP3
+  BAS(#FRAMES)
+  BAS(#VEL_PTP,100)
+  PTP XP3 
+  ;ENDFOLD
+  ;FOLD PTP P4  Vel= 100 % PDAT4 Tool:0 Base:0;%{PE}%R 3.2.15,%MKUKATPBASIS,%CMOVE,%VPTP,%P 1:PTP, 2:P4, 3:, 5:100, 7:PDAT4
+  PDAT_ACT=PPDAT4
+  BAS(#PTP_DAT)
+  FDAT_ACT=FP4
+  BAS(#FRAMES)
+  BAS(#VEL_PTP,100)
+  PTP XP4 
+  ;ENDFOLD
+END
+;FOLD subroutines {H}
+DEF  GO_REF ()
+  $TOOL=TOOL_DATA[CorrToolNo]
+  BAS (#VEL_CP,0.01 )
+  LIN  REF_PT[CorrToolNo]
+  BAS (#VEL_CP,2 )
+  $TOOL=$NULLFRAME
+  HALT
+END
+
+DEF  INTER_1 ( )
+  CHECK_FLAG=FALSE
+  BRAKE
+  MESS (3,2 )
+  W_CRASH ( )
+  RESUME
+END
+
+DEF  W_CRASH ( )
+  ;********************************
+  ;* Tooldata-Check after Crash   *
+  ;********************************
+  REAL T[4,4]
+  REAL NEW_WZK[3],OLD_WZK[3],DIST_WZK[3]
+  FRAME REF_POINT,OLD_BASE,OLD_TOOL
+  INT I
+
+  OLD_TOOL=$TOOL
+  OLD_BASE=$BASE
+  $TOOL=$NULLFRAME
+  $BASE=$POS_ACT
+  $BASE.X=REF_PT[CorrToolNo].X
+  $BASE.Y=REF_PT[CorrToolNo].Y
+  $BASE.Z=REF_PT[CorrToolNo].Z
+  NEW_WZK[1]=-$POS_ACT.X
+  NEW_WZK[2]=-$POS_ACT.Y
+  NEW_WZK[3]=-$POS_ACT.Z
+  $TOOL=OLD_TOOL
+  $BASE=OLD_BASE
+  OLD_WZK[1]=TOOL_DATA[CorrToolNo].X
+  OLD_WZK[2]=TOOL_DATA[CorrToolNo].Y
+  OLD_WZK[3]=TOOL_DATA[CorrToolNo].Z
+  FOR I=1 TO  3
+    DIST_WZK[I]=NEW_WZK[I]-OLD_WZK[I]
+  ENDFOR
+  IF (VEK_LAENGE(DIST_WZK[],3)<0.1) THEN
+    MESS (4,1 )
+  ELSE
+    IF (VEK_LAENGE(DIST_WZK[],3)>MAX_CRASH) THEN
+      MESS (1,1 )
+    ELSE
+      MESS (2,1 )
+      TOOL_DATA[CorrToolNo].X=NEW_WZK[1]
+      TOOL_DATA[CorrToolNo].Y=NEW_WZK[2]
+      TOOL_DATA[CorrToolNo].Z=NEW_WZK[3]
+    ENDIF
+  ENDIF
+END
+
+DEFFCT  REAL VEK_LAENGE(V[],N :IN)
+  REAL V[]
+  INT N
+  RETURN  (SQRT(SKAL_PROD(V[],V[],N)))
+ENDFCT
+
+DEFFCT  REAL SKAL_PROD(V[],W[],N :IN)
+  REAL V[],W[]
+  INT N,I
+  REAL SK_PROD
+  SK_PROD=0
+  FOR I=1 TO  N
+    SK_PROD=SK_PROD+V[I]*W[I]
+  ENDFOR
+  RETURN  (SK_PROD)
+ENDFCT
+
+DEF  MESS (MESS_NR,OPT ) ;============
+  ;Error message 
+  ;=====================================
+  INT MESS_NR,OPT
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TOOLCOR",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  $MSG_T=EMPTY_MSG
+  SWITCH  MESS_NR
+  CASE 1
+    $MSG_T.KEY[]="ToBigDifferenceInToolData"
+  CASE 2
+    $MSG_T.KEY[]="DifferenceInToleranceArea"
+  CASE 3
+    $MSG_T.KEY[]="CheckDifferenceToolToRefpoint"
+  CASE 4
+    $MSG_T.KEY[]="NoDifference"
+  CASE 5
+    $MSG_T.KEY[]="OnlyInT1ModeAllowed"
+  CASE 6
+    $MSG_T.KEY[]="InvalidToolNumber"
+  CASE 7
+    $MSG_T.KEY[]="TouchupRefPT"
+  DEFAULT
+    $MSG_T.KEY[]="MessageNumberIsWrong"
+  ENDSWITCH
+  SWITCH  OPT
+  CASE 1
+    $MSG_T.VALID=TRUE
+    WHILE  $MSG_T.VALID
+      WAIT SEC 0.05
+    ENDWHILE
+    WAIT SEC 0.2
+  CASE 2
+    $MSG_T.VALID=TRUE
+    HALT
+  DEFAULT
+  ENDSWITCH
+  ; $MSG_T=EMPTY_MSG
+END
+DEF  CHK_T_NO ( )
+  WHILE  ((CorrToolNo<1) OR (CorrToolNo>MAX_TOOL))
+    MESS (6,2 )
+  ENDWHILE
+END
+;ENDFOLD

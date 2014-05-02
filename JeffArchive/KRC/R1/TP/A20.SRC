@@ -1,0 +1,1663 @@
+&ACCESS RO
+&REL 1
+&COMMENT ARC20 FOR PROGRAMMNUMBER
+DEF  A20 (INSTR :IN,A :IN,M :IN,PRNO :IN )
+;=========================================
+; FUNCTION : standard routines
+; Package:   A20 V3.2 / V4.1
+; Date:      26.09.02
+;=========================================
+  INT INSTR,PRNO
+  DECL WELD_ST A
+  DECL WELD_FI M
+  DECL WELD_FI TMP_W_SET ; Trigger
+
+  SWITCH  INSTR
+  CASE 2,5,12
+    PRG_NR=PRNO
+  ENDSWITCH
+
+  MEM[]="CTL"
+
+  SWITCH  INSTR
+
+  CASE 1 ;ARC_INI
+
+    CREATE_LIM( )
+    ARC_INI ( )
+
+  CASE 2 ;ARC_ON
+
+    ARC_ON (INSTR,A )
+
+  CASE 3 ;ARC_OFF at crater position
+
+    ARC_OFF (INSTR )
+
+  CASE 4 ;ARC_SWI_F
+
+    ARC_SWI_F (INSTR,ADEFAULT,M )
+
+  CASE 5 ;ARC_SWIP advance
+
+    ARC_SWIP (INSTR,M,PRNO )
+
+  CASE 6 ;TECH_STOP1
+
+    TECH_STOP1 (INSTR ) ;IR_STOPMESS
+
+  CASE 7 ;TECH_STOP2
+
+    TECH_STOP2 (INSTR ) ;seam error
+
+  CASE 9 ;TECH_STOP
+
+    IF ACT_STOP==FALSE THEN
+      TECH_STOP ( )     ;Techstop
+    ENDIF
+
+  CASE 10 ;ARC_OFF_P 
+
+    ARC_OFF_P (INSTR,ADEFAULT,M ) ;ArcOff prepare
+
+  CASE 12 ;ARC_OFF_V advance
+
+    ARC_OFF_V (INSTR,M,PRNO)
+
+  CASE 13 ;ARC_START 
+
+    IF ((RETRY_CNT<MAX_REA20) OR (RESTART_OPT==1)) THEN
+      SET_OUT (O_ACK_FLT[],3 ) ; acknowledge weld fault
+      ARC_ON (6,ST_ACT ) ;RESTART from IR_STOPMESS
+    ELSE
+      SET_OUT1 (O_FLT_SIGNAL,TRUE )
+      ERR_MSG(8)
+    ENDIF
+
+  CASE 14 ;ARC_SWI_T from Trigger Arc Switch
+
+    PRG_NR=FIFO_PRG[FIFO_READ]
+    TMP_W_SET=FIFO_WELD_P[FIFO_READ]
+    ARC_SWI_F (4,ADEFAULT,TMP_W_SET )
+
+  CASE 15 ;ARC_OFF_T from Trigger Arc Off
+
+    PRG_NR=FIFO_PRG[FIFO_READ]
+    TMP_W_SET=FIFO_WELD_P[FIFO_READ]
+    ARC_OFF_P (10,ADEFAULT,TMP_W_SET )
+
+  ENDSWITCH
+
+END ; ( Main )
+;==================================
+; FUNCTION : init for arcweld
+;==================================
+;------------------------------
+; testing SUBMIT is running
+;------------------------------
+DEF  ARC_INI ( )
+
+  DECL CHAR SUB_NAME[8]
+  INT N
+
+  ERR=FALSE
+  SUB_NAME[]="SPS     "
+  SPS_RUN (SUB_NAME[],3 )
+  CHECK_BWD( )
+  A_FG_MECH1=A_WEAV_GEN[1]
+  A_FG_MECH2=A_WEAV_GEN[2]
+
+  ; init peripherical signals
+  FOR N=1 TO  15
+    IF (O_WELD_CTRL[N].OUT_NR>0) THEN
+      $OUT[O_WELD_CTRL[N].OUT_NR]=O_WELD_CTRL[N].INI
+    ENDIF
+  ENDFOR
+
+  TECH_MOTION=FALSE
+
+  REPEAT 
+    DIG_OUT (0,PRG_NO,1,PRGNO_MIN,PRGNO_MAX ) ; init program number
+  UNTIL (PRG_NO.FIRST_BIT <> 0 )
+
+  FLT_SERV_FCT=0 ; init fault service function
+  ARC_INSTR=0 ; reset online correction
+  WELD_ACTIVE=FALSE ; reset weld and cleaner markers
+  CLEAN_ACTIVE=FALSE
+  A_FG_MECH1=A_WEAV_GEN[1]
+  A_FG_MECH2=A_WEAV_GEN[2]
+
+  FOR N=1 TO  2
+
+    $TECH[N].MODE=#OFF
+    $TECH[N].CLASS=#PATH
+    $TECH[N].FCT.ORDER=1
+    $TECH[N].FCT.CPNUM=2
+    $TECH[N].FCT.CPS1.X1=0
+    $TECH[N].FCT.CPS1.Y1=0
+    $TECH[N].FCT.CPS1.X2=1
+    $TECH[N].FCT.CPS1.Y2=0
+
+    $TECH[N].FCTCTRL.SCALE_IN=1
+    $TECH[N].FCTCTRL.SCALE_OUT=1
+    $TECH[N].FCTCTRL.OFFSET_IN=0
+    $TECH[N].FCTCTRL.OFFSET_OUT=0
+
+  ENDFOR
+
+  FOR N=1 TO  6
+    FIF_VEL[N]=FALSE
+  ENDFOR
+
+  $TECH[1].FCTCTRL.GEOREF=#Y
+  $TECH[2].FCTCTRL.GEOREF=#X
+  $TECHANGLE.A=0
+  $TECHANGLE.B=0
+  $TECHANGLE.C=0
+  $TECHSYS=#TTS
+
+  FIFO_READ=1 ; init arc_switch
+  FIFO_WRITE=1
+  RETRY_CNT=0 ; init weld fault handling
+
+  $CYCFLAG[3]=TRUE ; reset of CYCFLAG
+
+  FOR N=1 TO  3
+    IF I_WELD_FLT[N].NO>0 THEN
+      FLT_NUM[N]=I_WELD_CTRL[I_WELD_FLT[N].NO].IN_NR
+      IF FLT_NUM[N]==0 THEN
+        IF I_WELD_FLT[N].STATE==TRUE THEN
+          FLT_NUM[N]=1025
+        ELSE
+          FLT_NUM[N]=1026
+        ENDIF
+      ENDIF
+    ELSE
+      IF I_WELD_FLT[N].STATE==TRUE THEN
+        FLT_NUM[N]=1025
+      ELSE
+        FLT_NUM[N]=1026
+      ENDIF
+    ENDIF
+  ENDFOR
+
+  $CYCFLAG[3]=((($IN[FLT_NUM[1]]==I_WELD_FLT[1].STATE) AND ($IN[FLT_NUM[2]]==I_WELD_FLT[2].STATE) AND ($IN[FLT_NUM[3]]==I_WELD_FLT[3].STATE)) AND ($TIMER_FLAG[15]==TRUE)) OR ($TIMER_FLAG[15]==FALSE) OR (T_STOP==TRUE)
+
+  IF OVR_CTRL THEN
+    IF (($OV_PRO<>100) AND ($MODE_OP<>#EX)) THEN
+      $MSG_T=CHECK_HUNDRED
+      $MSG_T.VALID=TRUE
+
+      WHILE  $MSG_T.VALID
+        WAIT SEC 0.05
+      ENDWHILE
+      WAIT SEC 0.2
+
+      ANSWER=$MSG_T.ANSWER
+
+      IF ANSWER==1 THEN
+        $OV_PRO=100
+      ENDIF
+    ENDIF
+  ENDIF
+
+  IF (($MODE_OP==#T1) AND ($RED_T1_OV_CP==TRUE) AND  (A_HOT_WELD==#ACTIVE) ) THEN
+    REPEAT 
+      ERR_MSG(12)
+    UNTIL ((A_HOT_WELD==#IDLE) OR ($MODE_OP <> #T1 ))
+  ENDIF
+  
+END ;(ARC_INI)
+;==================================
+; FUNCTION : switch on weld 
+;==================================
+DEF ARC_ON (CMD :IN,A :IN )
+
+  DECL WELD_ST A
+  INT N,CMD
+  BOOL REST_MODE
+  BOOL RETRY_WELD
+
+  B_RESTART=FALSE
+  $TIMER_STOP[15]=TRUE
+  $TIMER[15]=(-A_CTRL_DELAY) ; [msec]
+
+  WHILE  ARC20==FALSE ;ARC20 Bool Variable not set
+    ERR_MSG (7 )
+  ENDWHILE
+
+  CONTINUE
+  WHILE   NOT ($PRO_STATE0==#P_ACTIVE) ;ARC20 Bool Variable not set
+    ERR_MSG (9 )
+  ENDWHILE
+
+  CONTINUE
+  IF ((A_HOT_WELD==#ACTIVE) AND ($MODE_OP==#T1) AND (PROC_IN_T1==FALSE)) THEN
+    REPEAT
+      ERR_MSG (10 )
+    UNTIL ((PROC_IN_T1==TRUE) OR (A_HOT_WELD==#IDLE) OR ($MODE_OP<>#T1))
+  ENDIF
+
+  REPEAT 
+    CONTINUE
+    IF (($MODE_OP <> #EX) AND (A_HOT_WELD==#ACTIVE)) THEN
+      IF GET_INP(I_ENB_W_EXT)==FALSE THEN
+        ERR_MSG(11) ;ChangeWeldKeySwitchToHot
+      ENDIF
+    ENDIF  
+  UNTIL (($MODE_OP ==#EX) OR (A_HOT_WELD==#IDLE) OR (GET_INP(I_ENB_W_EXT)==TRUE))
+
+  IF CMD<>2 THEN
+    REST_MODE=TRUE
+  ELSE
+    ERR=FALSE ;real ARC_ON
+    A.PRG_NO=PRG_NR ; weld parameters global
+    ST_ACT=A
+    REST_MODE=FALSE
+
+    IF (CMD <> 6) THEN
+      RETRY_CNT=0 ; reset retry counter if no $Stopmess-Restart
+    ENDIF
+
+    INTERRUPT ON 3 ; switch on interrupt for stopmess faults
+
+    IF PRG_ON_MODE<>0 THEN
+      DIG_OUT (PRG_NR,PRG_NO,PRG_ON_MODE,PRGNO_MIN,PRGNO_MAX )
+    ENDIF
+
+    FIFO_READ=1
+    FIFO_WRITE=1
+
+  ENDIF
+
+  SET_OUT1 (O_FLT_SIGNAL,FALSE ) ; reset fault message
+  WAIT SEC 0.01
+  TECH_MOTION=TRUE
+
+  IF  NOT ($T1 AND  NOT (PROC_IN_T1)) AND ($PRO_MODE1==#GO) AND (A_HOT_WELD==#ACTIVE) THEN
+
+    ; continue only if weld machine is ok, or no weld
+    IF PROC_ENABLE AND GET_INP(I_ENB_W_EXT) THEN
+      WHILE   NOT (WAI_INP(I_WELD_COND[])) AND (PROC_ENABLE AND GET_INP(I_ENB_W_EXT)) AND (A_HOT_WELD==#ACTIVE)
+        SET_OUT1 (O_FLT_SIGNAL,TRUE )
+        ERR_MSG (1 ) ; weld control not ready
+        SET_OUT1 (O_FLT_SIGNAL,FALSE )
+        SET_OUT (O_ACK_FLT[],3 ) ; acknowledge weld fault
+      ENDWHILE
+    ENDIF
+
+    WELD_ACTIVE=FALSE
+    START_CNT=0
+
+    ; start weld machine if weld is enabled
+    IF PROC_ENABLE AND GET_INP(I_ENB_W_EXT) AND (A_HOT_WELD==#ACTIVE) AND ($PRO_MODE <> #BSTEP) AND (ERR==FALSE) THEN
+
+      WELD_ACTIVE=TRUE
+      ACT_STOP=FALSE
+      T_STOP=FALSE
+      SET_OUT (O_WELD_START[],1 )
+      RETRY_WELD=TRUE
+
+      WHILE  (A_HOT_WELD==#ACTIVE) AND  NOT (WAI_INP(I_START_MOVE[])) AND (PROC_ENABLE AND GET_INP(I_ENB_W_EXT)) AND RETRY_WELD AND ($PRO_MODE <> #BSTEP)
+
+        WELD_ACTIVE=FALSE
+        SET_OUT (O_FLT_ARC_ON[],1 )
+        START_CNT=START_CNT+1
+        SET_OUT1 (O_FLT_SIGNAL,TRUE )
+
+        IF (AUTO_RETRY==1) AND (START_CNT<MAX_AUTO_R) THEN
+
+          IF (RESTART_OPT==3) THEN
+            FLT_SERV (#ACTIVE,#ACTIVE )
+          ELSE
+            WAIT SEC 0.2
+          ENDIF
+
+        ELSE
+
+          IF (START_CNT<MAX_AUTO_R) THEN
+
+            RETRY_WELD=TRUE
+            ERR_MSG (2 ) ; ignition error
+
+            IF (RESTART_OPT==3) THEN
+              FLT_SERV (#ACTIVE,#ACTIVE )
+            ENDIF
+
+          ELSE
+
+            ERR_MSG (2 )
+            WAIT SEC 0.5
+            ERR_MSG (8 )
+            SET_OUT (O_ACK_FLT[],3 ) ; acknowledge weld fault
+            SET_OUT1 (O_FLT_SIGNAL,TRUE )
+            RETRY_WELD=FALSE
+            ERR=TRUE
+
+          ENDIF
+
+        ENDIF
+
+        IF ((RESTART_OPT==0) AND (CMD<>2)) THEN ; RESTART in this mode it has to be a cold seam  not a real ARC_ON
+
+          RETRY_WELD=FALSE
+          ERR=TRUE
+          ERR_MSG (8 )
+
+        ENDIF
+
+        IF ((ERR==FALSE) OR (RETRY_WELD==TRUE)) THEN ; Retries over limit
+          SET_OUT (O_ACK_FLT[],3 ) ; acknowledge weld fault
+          SET_OUT1 (O_FLT_SIGNAL,FALSE )
+        ENDIF
+
+        IF ((RETRY_WELD==TRUE) AND (A_HOT_WELD==#ACTIVE) AND PROC_ENABLE) AND GET_INP(I_ENB_W_EXT) AND ($PRO_MODE <> #BSTEP) AND (ERR==FALSE) THEN
+
+          SET_OUT (O_ACK_FLT[],3 ) ; acknowledge weld fault
+          WELD_ACTIVE=TRUE       
+          ACT_STOP=FALSE
+          T_STOP=FALSE
+          SET_OUT (O_WELD_START[],1 )
+
+        ENDIF
+
+      ENDWHILE
+
+    ENDIF
+
+    IF ((A.START_TIME>0.0) AND (A_HOT_WELD==#ACTIVE)) THEN
+      WAIT SEC A.START_TIME
+    ENDIF
+
+  ENDIF
+
+  IF WELD_ACTIVE THEN
+    $TIMER_STOP[15]=FALSE
+    T_STOP=FALSE ;reset flag for CYCFLAG 
+  ENDIF
+
+  IF PRG_ON_MODE<>0 THEN
+    SET_OUT (O_ACK_START[],1 ) ; acknowledge weld start
+  ENDIF
+
+  IF  NOT (REST_MODE) THEN
+    ARC_INSTR=1
+  ENDIF ; NOT(REST_MODE)
+
+  IF WELD_ACTIVE THEN
+    WAIT SEC 0.001
+    INTERRUPT ON 6 ; interrupt for checking weld system
+  ENDIF
+
+  INTERRUPT ON 3
+  ACT_STOP=FALSE ; in case of NOT hot necessary
+  T_STOP=FALSE
+
+END ;(ARC_ON)
+;===================================
+;  FUNCTION: prepare arc switch 
+;            interrupt (VL)
+;==================================
+DEF  ARC_SWIP (INSTR :IN,M :IN,PRG :IN )
+
+  INT INSTR,PRG
+  DECL WELD_FI M
+
+  DECL PRO_MODE PRO_MODE_L
+
+  $TECHSYS=#TTS
+  TECH_MOTION=TRUE
+
+  $APO.CDIS=A_AP_DIS_TCH
+
+  IF $MOVE_BCO==TRUE THEN
+    FIFO_WRITE=1
+    FIFO_READ=1
+  ENDIF
+
+  IF A_HPU_DRY_RN==#ACTIVE THEN
+    CONTINUE
+    $VEL.CP=DRY_RN_VEL*100.0/$OV_PRO
+    FIF_VEL[FIFO_WRITE]=TRUE
+  ELSE
+
+    IF V_ILF THEN
+      M.VELOCITY=$VEL.CP*60
+    ELSE
+      $VEL.CP=(M.VELOCITY*1.6667/$OV_PRO) 
+    ENDIF
+
+    FIF_VEL[FIFO_WRITE]=FALSE
+    SET_WEAVE_ANGLE (M.WEAVANG_MECH)
+
+  ENDIF
+
+  M.PRG_NO=PRG_NR
+
+  CONTINUE
+  T1_L=$T1
+  CONTINUE
+  PRO_MODE_L=$PRO_MODE1
+
+  IF ((PRG_SWI_MODE<>0) AND (FIFO_WRITE==1) AND (FIFO_READ <=1)) THEN
+    DIG_OUT (PRG_NR,PRG_NO,PRG_SWI_MODE,PRGNO_MIN,PRGNO_MAX )
+  ENDIF
+
+  FIFO_WELD_P[FIFO_WRITE]=M
+  FIFO_PRG[FIFO_WRITE]=PRG
+  FIFO_WRITE=FIFO_WRITE+1
+
+  IF (FIFO_WRITE>FIFO_MAX) THEN
+    FIFO_WRITE=1
+  ENDIF
+
+  WEAV_DEF (#FG_MECHANIC,M.WEAVFIG_MECH,1,2 )
+  TRIGGER WHEN DISTANCE=0 DELAY=0 DO A20 (ARC_SWI_T ) PRIO=-1
+
+END ;(ARC_SWIP advance) 
+;================================
+; FUNCTION : Switch to 
+;   different weld parameters(HL) 
+;================================
+DEF  ARC_SWI_F (INSTR :IN,A :IN,M :IN )
+
+  INT INSTR
+  DECL WELD_ST A
+  DECL WELD_FI M
+  DECL TECHFCTCTRL W_NEW1,W_NEW2
+  DECL INT ACT_PRNO
+
+  IF A_HPU_DRY_RN==#ACTIVE THEN
+    CONTINUE
+    $VEL.CP=DRY_RN_VEL
+  ELSE
+    IF V_ILF THEN
+      FI_ACT=M
+      FI_ACT.PRG_NO=PRG_NR
+      FI_ACT.VELOCITY=$VEL.CP
+    ELSE
+      FI_ACT=M
+      FI_ACT.PRG_NO=PRG_NR
+    ENDIF
+  ENDIF
+
+  M.PRG_NO=PRG_NR
+  ACT_PRNO=M.PRG_NO
+
+  ST_ACT.PRG_NO=M.PRG_NO
+  ST_ACT.VELOCITY=M.VELOCITY
+  ST_ACT.WEAVFIG_MECH=M.WEAVFIG_MECH
+  ST_ACT.WEAVLEN_MECH=M.WEAVLEN_MECH
+  ST_ACT.WEAVAMP_MECH=M.WEAVAMP_MECH
+  ST_ACT.WEAVANG_MECH=M.WEAVANG_MECH
+  ST_ACT.END_TIME=M.END_TIME
+
+  M=FIFO_WELD_P[FIFO_READ]
+  FIFO_READ=FIFO_READ+1
+
+  IF (FIFO_READ>FIFO_MAX) THEN
+    FIFO_READ=1
+  ENDIF
+
+  IF ((M.WEAVLEN_MECH==0.0) OR  (M.WEAVAMP_MECH==0.0)) AND (M.WEAVFIG_MECH>0) AND (A_HPU_DRY_RN==#IDLE) THEN
+    BRAKE
+    STOP_WELD_IMMEDIATELY ( )
+    ERR_MSG(17)
+  ENDIF
+
+  IF ((M.WEAVLEN_MECH > 0.0) AND (M.WEAVAMP_MECH > 0.0)) AND (M.WEAVFIG_MECH>0) AND (A_HPU_DRY_RN==#IDLE) THEN
+
+    W_NEW1.SCALE_IN=M.WEAVLEN_MECH
+    W_NEW1.SCALE_OUT=M.WEAVAMP_MECH
+    W_NEW1.OFFSET_IN=0
+    W_NEW1.OFFSET_OUT=0
+    W_NEW2.SCALE_IN=M.WEAVLEN_MECH
+    W_NEW2.SCALE_OUT=M.WEAVAMP_MECH
+    W_NEW2.OFFSET_IN=0
+    W_NEW2.OFFSET_OUT=0
+
+    $TECH_C[1].FCTCTRL=W_NEW1
+    $TECH_C[2].FCTCTRL=W_NEW2
+
+    IF FIF_VEL[FIFO_READ]==FALSE THEN
+      $TECH_C[1].MODE=#CYCLE
+      $TECH_C[2].MODE=#CYCLE
+    ELSE
+      $TECH_C[1].MODE=#OFF
+      $TECH_C[2].MODE=#OFF
+    ENDIF
+
+  ELSE
+
+    IF (FIF_VEL[FIFO_READ]==FALSE) AND (M.WEAVLEN_MECH>0) AND (M.WEAVAMP_MECH>0) AND (M.WEAVFIG_MECH>0) THEN
+      
+      IF A_HPU_DRY_RN==#IDLE THEN
+        $TECH_C[1].MODE=#CYCLE
+        $TECH_C[2].MODE=#CYCLE
+      ELSE
+        $TECH_C[1].MODE=#OFF
+        $TECH_C[2].MODE=#OFF
+      ENDIF
+
+    ELSE
+      $TECH_C[1].MODE=#OFF
+      $TECH_C[2].MODE=#OFF
+    ENDIF
+
+  ENDIF
+
+  ARC_INSTR=2 ; arc instruction is arc_swi
+
+  IF PRG_SWI_MODE==1 THEN
+
+    IF (PRG_NO.CODING <> 0) THEN
+      IF (PRG_NR > LIMIT_PRG_NR[PRG_NO.CODING]) THEN
+        BRAKE
+        STOP_WELD_IMMEDIATELY ( )
+      ENDIF
+    ENDIF
+
+    DIG_OUT (PRG_NR,PRG_NO,PRG_SWI_MODE,PRGNO_MIN,PRGNO_MAX )
+
+  ENDIF
+
+  SET_OUT (O_STROB_PGNO[],1 )
+  TECH_MOTION=TRUE
+
+  IF (PRG_SWI_MODE==2) THEN
+
+    IF (FIFO_READ<=FIFO_MAX) THEN ; FIFO_READ is incremented
+      ACT_PRNO=FIFO_WELD_P[FIFO_READ].PRG_NO ; programm number from FIFO stack, FIFO pointer is incremented
+    ELSE
+      ACT_PRNO=FIFO_WELD_P[1].PRG_NO ; programm number from FIFO[1]element 
+    ENDIF
+
+    IF (PRG_NO.CODING <> 0) THEN
+      IF (ACT_PRNO > LIMIT_PRG_NR[PRG_NO.CODING]) THEN
+        BRAKE
+        STOP_WELD_IMMEDIATELY ( )
+      ENDIF
+    ENDIF
+
+    DIG_OUT (ACT_PRNO,PRG_NO,PRG_SWI_MODE,PRGNO_MIN,PRGNO_MAX ) ;PRG_NO shows the next one
+
+  ENDIF
+
+END ; (ARC_SWI_F interrupt)
+;==============================
+; Preparing Velocity(VL)
+;=============================
+DEF  ARC_OFF_V (INSTR :IN,WV_PRG_VEL :IN,PRG :IN )
+
+  DECL WELD_FI WV_PRG_VEL
+  DECL PRO_MODE PRO_MODE_L
+  INT INSTR,PRG
+
+  TECH_MOTION=TRUE
+  $TECHSYS=#TTS
+
+  IF $MOVE_BCO==TRUE THEN
+    FIFO_WRITE=1
+    FIFO_READ=1
+  ENDIF
+
+  IF A_HPU_DRY_RN==#ACTIVE THEN
+    CONTINUE
+    $VEL.CP=DRY_RN_VEL*100.0/$OV_PRO
+  ELSE
+
+    IF V_ILF THEN
+
+      WELD_ENDTIME=WV_PRG_VEL.END_TIME
+      WV_PRG_VEL.PRG_NO=PRG_NR
+      WV_PRG_VEL.VELOCITY=$VEL.CP*60
+      FIF_VEL[FIFO_WRITE]=TRUE
+
+    ELSE
+
+      WELD_ENDTIME=WV_PRG_VEL.END_TIME
+      WV_PRG_VEL.PRG_NO=PRG_NR
+      $VEL.CP=(WV_PRG_VEL.VELOCITY*1.6667/$OV_PRO)
+      FIF_VEL[FIFO_WRITE]=FALSE
+
+    ENDIF
+
+    SET_WEAVE_ANGLE (WV_PRG_VEL.WEAVANG_MECH)
+
+  ENDIF
+
+  FI_ACT=WV_PRG_VEL
+
+  FIFO_WELD_P[FIFO_WRITE]=WV_PRG_VEL
+  FIFO_PRG[FIFO_WRITE]=PRG
+
+  $APO.CDIS=A_AP_DIS_TCH
+
+  CONTINUE
+  T1_L=$T1
+  CONTINUE
+  PRO_MODE_L=$PRO_MODE1
+
+  IF (PRG_SWI_MODE==2) THEN
+    DIG_OUT (PRG_NR,PRG_NO,PRG_SWI_MODE,PRGNO_MIN,PRGNO_MAX )
+  ENDIF
+
+  WEAV_DEF (#FG_MECHANIC,WV_PRG_VEL.WEAVFIG_MECH,1,2 )
+  TRIGGER WHEN DISTANCE=0 DELAY=0 DO A20 (ARC_OFF_T ) PRIO=-1
+
+END ; (ARC_OFF_F advance)
+;==================================
+; FUNCTION : Switch off welding(HL)
+;==================================
+DEF  ARC_OFF_P (INSTR :IN,A :IN,M :IN )
+
+  DECL TECHFCTCTRL W_NEW1,W_NEW2
+  DECL WELD_ST A
+  DECL WELD_FI M
+  INT ARC_INSTR_L,INSTR
+
+  TECH_MOTION=TRUE
+  ST_ACT.PRG_NO=PRG_NR
+  IF V_ILF THEN
+    ST_ACT.VELOCITY=$VEL.CP
+  ELSE
+    ST_ACT.VELOCITY=M.VELOCITY
+  ENDIF
+
+  ST_ACT.WEAVFIG_MECH=FI_ACT.WEAVFIG_MECH
+  ST_ACT.WEAVLEN_MECH=FI_ACT.WEAVLEN_MECH
+  ST_ACT.WEAVAMP_MECH=FI_ACT.WEAVAMP_MECH
+  ST_ACT.WEAVANG_MECH=FI_ACT.WEAVANG_MECH
+  ST_ACT.END_TIME=FI_ACT.END_TIME
+
+  ARC_INSTR_L=ARC_INSTR ;store arc_instr
+
+  IF (PRG_NO.CODING <> 0) THEN
+
+    IF (PRG_NR> LIMIT_PRG_NR[PRG_NO.CODING]) THEN
+      BRAKE
+      STOP_WELD_IMMEDIATELY ( )
+    ENDIF
+
+  ENDIF
+
+  DIG_OUT (PRG_NR,PRG_NO,PRG_ON_MODE,PRGNO_MIN,PRGNO_MAX )
+
+  IF ((M.WEAVLEN_MECH==0.0) OR  (M.WEAVAMP_MECH==0.0)) AND (M.WEAVFIG_MECH>0) AND (A_HPU_DRY_RN==#IDLE) THEN
+    BRAKE
+    STOP_WELD_IMMEDIATELY ( )
+    ERR_MSG(17)
+  ENDIF
+
+  ; switch mechanical weaving
+  IF (M.WEAVLEN_MECH>0) AND (M.WEAVAMP_MECH>0) AND (M.WEAVFIG_MECH>0) AND (A_HPU_DRY_RN==#IDLE) THEN
+
+    W_NEW1.SCALE_IN=M.WEAVLEN_MECH
+    W_NEW1.SCALE_OUT=M.WEAVAMP_MECH
+    W_NEW1.OFFSET_IN=0
+    W_NEW1.OFFSET_OUT=0
+    W_NEW2.SCALE_IN=M.WEAVLEN_MECH
+    W_NEW2.SCALE_OUT=M.WEAVAMP_MECH
+    W_NEW2.OFFSET_IN=0
+    W_NEW2.OFFSET_OUT=0
+
+    $TECH_C[1].FCTCTRL=W_NEW1
+    $TECH_C[2].FCTCTRL=W_NEW2
+
+    IF FIF_VEL[FIFO_READ]==FALSE THEN
+      $TECH_C[1].MODE=#CYCLE
+      $TECH_C[2].MODE=#CYCLE
+    ELSE
+      $TECH_C[1].MODE=#OFF
+      $TECH_C[2].MODE=#OFF
+    ENDIF
+
+  ELSE
+
+    IF (FIF_VEL[FIFO_READ]==FALSE) AND (M.WEAVLEN_MECH>0) AND (M.WEAVAMP_MECH>0) AND (M.WEAVFIG_MECH>0) THEN
+      IF A_HPU_DRY_RN==#IDLE THEN
+        $TECH_C[1].MODE=#CYCLE
+        $TECH_C[2].MODE=#CYCLE
+      ELSE
+        $TECH_C[1].MODE=#OFF
+        $TECH_C[2].MODE=#OFF
+      ENDIF
+    ELSE
+      $TECH_C[1].MODE=#OFF
+      $TECH_C[2].MODE=#OFF
+    ENDIF
+
+  ENDIF
+
+  ARC_INSTR=2 ; arc instruction is arc_swi
+  SET_OUT (O_STROB_PGNO[],1 )
+
+END ;(ARC_OFF_P) 
+;=================================================
+; FUNCTION : Switch off welding at crater position
+;=================================================
+DEF  ARC_OFF (INSTR :IN )
+
+  INT INSTR
+  BOOL WELD_ACT_L
+  ERR=FALSE
+  ARC_INSTR=0 ; reset global weld parameters
+  WAIT SEC 0.001 ; stop advance
+  WELD_ACT_L=WELD_ACTIVE
+  RETRY_CNT=0
+
+  INTERRUPT OFF 6 ; interrupt checking weld fault
+  T_STOP=FALSE
+  $TECH[1].MODE=#OFF
+  $TECH[2].MODE=#OFF
+
+  ; stop weld machine
+  SET_OUT (O_SEAM_END[],1 )
+  WELD_ACTIVE=FALSE
+
+  IF (WELD_ENDTIME>0.0) AND WELD_ACT_L THEN
+    WAIT SEC WELD_ENDTIME
+  ENDIF
+
+  ; wait for weld end
+  IF WELD_ACT_L THEN
+    IF  NOT (WAI_INP(I_WELD_END[])) THEN
+      SET_OUT1 (O_FLT_SIGNAL,TRUE )
+      ERR_MSG (6 ) ; time out waiting for weld end
+      SET_OUT1 (O_FLT_SIGNAL,FALSE )
+    ENDIF
+  ENDIF
+
+  SET_OUT (O_ACK_WELD_E[],1 )
+  TECH_MOTION=FALSE
+
+END ;(ARC_OFF at position)
+;===============================
+; Function : handle all problems
+;     which force $stopmess 
+;===============================
+DEF  TECH_STOP1 (INSTR :IN )
+
+  INT INSTR
+  BOOL SV_APPL_RUN
+
+  ACT_STOP=TRUE
+  MARK_T1=$T1 ; mark mode when fault occurs
+
+  IF WELD_ACTIVE THEN ; $stopmess retrys
+    RETRY_CNT=RETRY_CNT+1
+  ENDIF
+
+  ACTIVE_L=WELD_ACTIVE
+  INTERRUPT OFF 6 ; stop interrupts for weld faults
+
+  SET_OUT (O_FLT_WELD[],1 ) ; stop welding and cleaner
+  WELD_ACTIVE=FALSE
+  SET_OUT (O_FLT_CLEAN[],1 ) ; switch off cleaner
+  SET_OUT1 (O_FLT_SIGNAL,TRUE ) ; signal to PLC 
+
+  IF $STOPMESS==FALSE THEN
+    GOTO ERR_EXIT
+  ENDIF
+
+  WELD_ACTIVE=ACTIVE_L
+
+  IF $T1 EXOR MARK_T1 THEN
+    WELD_ACTIVE=FALSE
+  ENDIF
+
+  SWITCH  RESTART_OPT
+
+  CASE 0 ;COLD
+
+    IF ACTIVE_L THEN
+      ARC_INSTR=0
+      B_RESTART=FALSE
+      ERR_MSG(8)
+    ENDIF
+
+  CASE 1
+
+    IF ACTIVE_L THEN
+      B_RESTART=TRUE
+    ENDIF
+
+  CASE 2
+
+    IF ACTIVE_L AND (RETRY_CNT<=MAX_REA20) THEN
+      B_RESTART=TRUE
+    ELSE
+      B_RESTART=FALSE
+      SET_OUT1 (O_FLT_SIGNAL,TRUE )
+      ERR_MSG (8 ) ; weld fault
+      ARC_INSTR=0
+    ENDIF
+
+  CASE 3
+
+    IF ACTIVE_L AND (RETRY_CNT<=MAX_REA20) THEN
+      B_RESTART=TRUE
+    ENDIF
+
+  DEFAULT
+
+    $TECH_C[1].MODE=#OFF
+    $TECH_C[2].MODE=#OFF
+    WELD_ACTIVE=FALSE
+    ARC_INSTR=0
+
+  ENDSWITCH
+
+  ERR_EXIT: 
+
+END ;(TECH_STOP1)
+;==============================
+; Function : handle weld faults
+;==============================
+DEF  TECH_STOP2 (INSTR :IN )
+
+  INT INSTR
+
+  ACT_STOP=TRUE
+  INTERRUPT OFF 3
+  INTERRUPT OFF 6 ; stop interrupts for weld faults
+
+  ACTIVE_L=WELD_ACTIVE
+  SET_OUT (O_FLT_WELD[],1 ) ; stop welding machine
+  WELD_ACTIVE=FALSE
+
+  SET_OUT1 (O_FLT_SIGNAL,TRUE ) ; signal to PLC 
+  RETRY_CNT=RETRY_CNT+1
+  SET_OUT (O_FLT_CLEAN[],1 ) ; switch off cleaner
+
+  BRAKE
+  ERR_MSG (5 ) ; weld fault
+
+  IF (($MOVE_BCO==FALSE) AND ($ON_PATH==FALSE) AND ( NOT ($MODE_OP==#T1)) AND ( NOT ($MODE_OP==#T2))) THEN
+    PTP  $AXIS_RET
+  ENDIF
+
+  SET_OUT (O_ACK_FLT[],3 ) ; acknowledge weld fault
+  SET_OUT1 (O_FLT_SIGNAL,FALSE )
+
+  SWITCH  RESTART_OPT
+
+  CASE 0 ; cold continue
+
+    ACTIVE_L=FALSE
+    ARC_INSTR=0
+    ERR_MSG(8)
+
+  CASE 1 ; start weld again
+
+    IF ACTIVE_L THEN
+      ARC_ON (7,ST_ACT )
+    ENDIF
+
+  CASE 2 ; start weld again until max_retry
+
+    IF ACTIVE_L AND (RETRY_CNT<=MAX_REA20) THEN
+      ARC_ON (7,ST_ACT )
+    ELSE
+      SET_OUT1 (O_FLT_SIGNAL,TRUE )
+      ERR_MSG (8 ) ; weld fault
+      ARC_INSTR=0
+    ENDIF
+
+  CASE 3 ; user defined service routine
+
+    IF ACTIVE_L AND (RETRY_CNT<=MAX_REA20) THEN
+
+      $TECH_C[1].MODE=#OFF
+      $TECH_C[2].MODE=#OFF
+      FLT_SERV (#ACTIVE,#IDLE )
+      ARC_ON (7,ST_ACT )
+
+      IF (ST_ACT.WEAVLEN_MECH>0) AND (ST_ACT.WEAVAMP_MECH>0) AND (ST_ACT.WEAVFIG_MECH>0) THEN
+        $TECH_C[1].MODE=#CYCLE
+        $TECH_C[2].MODE=#CYCLE
+      ENDIF
+
+    ENDIF
+
+  DEFAULT
+
+    $TECH_C[1].MODE=#OFF
+    $TECH_C[2].MODE=#OFF
+    ARC_INSTR=0
+    ACTIVE_L=FALSE
+
+  ENDSWITCH
+
+  SET_OUT1 (O_FLT_SIGNAL,FALSE ) ; reset of  error signal to PLC
+  INTERRUPT ON 3
+
+END ;(TECH_STOP2) 
+;====================
+DEF STOP_WELD_IMMEDIATELY ( )
+
+  IF WELD_ACTIVE THEN
+
+    INTERRUPT OFF 6
+    SET_OUT (O_SEAM_END[],0 ) ;stop welding machine
+    WELD_ACTIVE=FALSE
+    SET_OUT1 (O_FLT_SIGNAL,TRUE ) ; reset of  error signal to PLC
+
+  ENDIF
+
+  SET_OUT (O_FLT_CLEAN[],0 ) ; switch off cleaner
+
+END ;(STOP_WELD_IMMEDIATELY)
+;==================================
+; stop welding at interpreter stop
+; no Restart of welding process
+; Switches off only at hot welding
+; executed only from submit
+;==================================
+DEF  TECH_STOP ( )
+
+  IF WELD_ACTIVE THEN
+
+    SET_OUT (O_SEAM_END[],0 ) ;stop welding machine
+    WELD_ACTIVE=FALSE
+    T_STOP=TRUE ;flag for $CYCFLAG to avoid interrupt service routine
+    SET_OUT1 (O_FLT_SIGNAL,TRUE ) ; reset of  error signal to PLC
+
+  ENDIF
+
+  SET_OUT (O_FLT_CLEAN[],0 ) ; switch off cleaner
+
+END ; (TECH_STOP)
+;=======================
+; Function : ERR Message
+;=======================
+DEF  ERR_MSG (ERR_NO )
+
+  INT ERR_NO
+  DECL INT OFFSET
+  DECL STATE_T STATE
+  DECL MSG_T P_MSG
+  DECL MSG_T EMPTY_MSG
+
+  WAIT SEC 0.1
+
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] " ",KEY[] " ",PARAM_TYP #VALUE,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  P_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPA20",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+  $MSG_T=P_MSG
+
+  ACT_ERR_MSG_NR= ERR_NO ;service variable
+
+  SWITCH  ERR_NO
+
+  CASE 0
+    $MSG_T.KEY[]="WrongSubmitprogramm"
+  CASE 1
+    $MSG_T.KEY[]="WeldControlNotReady"
+  CASE 2
+    $MSG_T.KEY[]="FiringFailure"
+  CASE 3
+    $MSG_T.KEY[]="TimeOutWaitingForWeldEnd"
+  CASE 4
+    $MSG_T.KEY[]="ControllerFault"
+  CASE 5
+    $MSG_T.KEY[]="WeldControlFault"
+  CASE 6
+    $MSG_T.KEY[]="SwitchOffWelding"
+    $MSG_T.TYP= #NOTIFY
+  CASE 7
+    $MSG_T.KEY[]="Arc20OptionBitNotActive"
+  CASE 8
+    $MSG_T.KEY[]="ContinueWithoutWelding"
+  CASE 9
+    $MSG_T.KEY[]="SubmitNotRunning"
+  CASE 10
+    $MSG_T.KEY[]="NoWeldinginT1"
+  CASE 11
+    $MSG_T.KEY[]="ChangeWeldKeySwitchToHot"
+  CASE 12
+    $MSG_T.KEY[]="ChangeRedT1ovCPtoFalseInCUSTOM"
+  CASE 13 
+    $MSG_T.KEY[]="PrgNrUnsuitableToConfiguration"
+  CASE 14 
+    $MSG_T.KEY[]="BackwardIniCfg" ;Backward.ini check
+  CASE 15
+    $MSG_T.KEY[]="NoSettingOfProgramNumber" 
+    $MSG_T.TYP=#NOTIFY
+  CASE 16 
+    $MSG_T.KEY[]="WrongFirstPrgNrDefinition"
+  CASE 17
+
+    $MSG_T.KEY[]="NoWeaveLengthNoAmplitude"
+    $MSG_T.TYP= #NOTIFY
+    WAIT SEC 0.1
+    $MSG_T.VALID=TRUE
+
+    WHILE  $MSG_T.VALID
+      WAIT SEC 0.1
+    ENDWHILE
+
+  DEFAULT
+
+  ENDSWITCH
+
+  $MSG_T.VALID=TRUE
+
+  IF ($MSG_T.TYP <> #NOTIFY) THEN
+    HALT
+  ENDIF
+
+  $MSG_T.RELEASE=TRUE
+  WHILE  $MSG_T.VALID
+    WAIT SEC 0.1
+  ENDWHILE
+
+  WAIT SEC 0.1
+  $MSG_T=EMPTY_MSG
+  WAIT SEC 0.3
+
+END ; (ERR_MSG)
+;==========================
+; FUNCTION : Digital output 
+;==========================
+DEF  DIG_OUT (VALUE,VALUE_TYPE,MODE,MIN,MAX )
+
+  DECL DIG_OUT_TYPE VALUE_TYPE
+  INT VALUE,MODE,MIN,MAX,VAL
+
+  IF VALUE<MIN THEN ; limit value
+    VALUE=MIN
+  ENDIF
+
+  IF ((A_HOT_WELD <> #ACTIVE) AND (VALUE_TYPE.CODING <> 0)) THEN
+
+    IF VALUE > LIMIT_PRG_NR[VALUE_TYPE.CODING] THEN
+      ERR_MSG(13 )
+    ENDIF
+
+  ENDIF
+
+  IF PRG_NO.FIRST_BIT<>0 THEN
+
+    IF VALUE > 0 THEN
+      
+      SWITCH  VALUE_TYPE.CODING ;code value
+
+      CASE 1 
+        VAL=VALUE             ;dual code
+      CASE 2 
+        VAL=EINS_AUS_N(VALUE) ;(1:n)   code 
+      CASE 3
+        VAL=EINS_AUS_N(VALUE) ;(1:n-1) code 
+      CASE 4
+        VAL=BCD_4(VALUE) ;BCD code
+
+      DEFAULT
+
+      ENDSWITCH
+
+      DUAL_OUT (VAL,MODE,VALUE_TYPE )
+
+    ELSE
+
+      VAL=0
+      DUAL_OUT (VAL,MODE,VALUE_TYPE ) ;NoSettingOfProgramNumber
+
+    ENDIF
+  ELSE
+    ERR_MSG(16);WrongFirstPrgNrDefinition
+  ENDIF
+
+END ;(DIG_OUT) 
+;===================================
+; FUNCTION : Dual output of VAL
+; according to setting of value type
+;===================================
+DEF  DUAL_OUT (VAL,MODE,VALUE_TYPE )
+
+  DECL DIG_OUT_TYPE VALUE_TYPE
+  INT VAL,MASK,PARI_ABS,N,MODE,REST,TMP_Parity
+
+  BOOL PARI_STS
+
+  PARI_STS=FALSE
+  MASK=1
+
+  ;output to programm numbers
+  FOR N=VALUE_TYPE.FIRST_BIT TO  VALUE_TYPE.FIRST_BIT+VALUE_TYPE.LENGTH-1
+
+    IF N > 0 THEN
+      CONTINUE
+      $OUT[N]=((VAL B_AND MASK)>0)
+      MASK=MASK*2
+    ENDIF
+
+  ENDFOR
+
+  IF (ARC_INSTR <>0) THEN
+
+    ; Parity control
+    IF (VALUE_TYPE.PARITY<>0) THEN
+
+      REST = VAL / 2
+      REST = VAL-REST*2
+      IF REST == 1 THEN
+        PARI_STS=STS_PARITY
+      ELSE
+        PARI_STS=NOT(STS_PARITY)
+      ENDIF
+
+      PARI_ABS=ABS(VALUE_TYPE.PARITY)
+      CONTINUE
+      $OUT[PARI_ABS]=PARI_STS
+
+    ENDIF
+
+  ELSE
+
+    TMP_Parity=PRG_NO.Parity
+    IF TMP_Parity <> 0 THEN
+      $OUT[TMP_Parity]=FALSE
+    ENDIF
+    
+  ENDIF
+
+END ;(DUAL_OUT)
+;==============================
+; FUNCTION : 1 out of n   code
+;            1 out of n-1 code
+;==============================
+DEFFCT  INT EINS_AUS_N(VALUE_IN)
+
+  INT VALUE_IN,N,MASK
+
+  IF (PRG_NO.CODING==3) THEN
+    IF VALUE_IN >= 1 THEN
+      VALUE_IN=VALUE_IN-1 ; (n-1 Code) 
+    ELSE
+      VALUE_IN=0
+    ENDIF
+  ENDIF
+
+  MASK=0
+  IF VALUE_IN==0 THEN
+    RETURN  (0)
+  ENDIF
+
+  IF VALUE_IN==1 THEN
+    RETURN  (1)
+  ENDIF
+
+  IF (VALUE_IN>1) THEN
+    MASK=1
+    FOR N=1 TO  VALUE_IN-1
+      MASK=MASK*2
+    ENDFOR
+    RETURN  (MASK)
+  ENDIF
+
+ENDFCT ;(EINS_AUS_N)
+;==========================
+; FUNCTION : BCD - coding
+;==========================
+DEFFCT  INT BCD_4(VALUE_IN)
+
+  INT VALUE_IN,VAL_INT,VAL_ACT,VAL_OUT,MASK
+
+  VAL_OUT=0
+  MASK=1
+  VAL_ACT=VALUE_IN
+
+  REPEAT
+
+    VAL_INT=VAL_ACT/10
+    VAL_OUT=(VAL_ACT-VAL_INT*10)*MASK+VAL_OUT
+    VAL_ACT=VAL_INT
+    MASK=MASK*16
+
+  UNTIL (VAL_ACT<=0)
+
+  RETURN  (VAL_OUT)
+
+ENDFCT ;(BCD_4)
+;============================
+; Function : torch cleaning
+;============================
+DEFFCT  BOOL GET_INP(INP)
+
+  DECL FCT_IN_T INP
+  INT N,N_ABS,NO_ABS
+  NO_ABS=ABS(INP.NO)
+
+  IF NO_ABS>0 THEN
+    N=I_WELD_CTRL[NO_ABS].IN_NR
+  ELSE
+    N=0
+  ENDIF
+
+  IF (N==0) OR (NO_ABS==0) THEN
+    RETURN  (TRUE)
+  ELSE
+    N_ABS=ABS(N)
+    RETURN  ($IN[N_ABS]==INP.STATE)
+  ENDIF
+
+ENDFCT ;(GET_INP)
+;=======================
+; FUNCTION : set output 
+;=======================
+DEF  SET_OUT (OUTP,MODE )
+
+  DECL FCT_OUT_T OUTP[]
+  INT MODE,N,NO1
+
+  FOR N=1 TO  3
+
+    IF (OUTP[N].NO>0) THEN
+
+      NO1=O_WELD_CTRL[OUTP[N].NO].OUT_NR
+
+      IF (NO1>0) THEN
+
+        IF (OUTP[N].PULS_TIME==0) THEN
+          SET_OUTP_S (NO1,OUTP[N].STATE,MODE )
+        ELSE
+          SET_OUTP_D (NO1,OUTP[N].STATE,ABS(OUTP[N].PULS_TIME),MODE ) ; pulse output
+        ENDIF
+
+      ENDIF
+
+    ENDIF
+
+  ENDFOR
+
+END ;(SET_OUT)
+;==============================
+; FUNCTION : set output static
+;    according to sign of NO
+;==============================
+DEF  SET_OUTP_S (NO,STATE,MODE )
+
+  INT NO,MODE
+  BOOL STATE
+
+  IF NO<>0 THEN
+
+    SWITCH  MODE
+
+    CASE 0,1,3
+      ; output with stopping advance
+      $OUT[NO]=STATE
+
+    CASE 2
+      ; output when apo starts
+      TRIGGER WHEN DISTANCE=0 DELAY=0 DO $OUT[NO]=STATE
+
+    DEFAULT
+
+    ENDSWITCH
+
+  ENDIF
+
+END ;(SET_OUTP_S) 
+;==============================
+; FUNCTION : set output static
+;    according to sign of NO
+;    Stopbutton
+;==============================
+DEF  SET_OUTP_ST (NO,STATE,MODE )
+
+  INT NO,MODE
+  BOOL STATE
+
+  IF NO<>0 THEN
+
+    ; action immediately or if APO starts
+    SWITCH  MODE
+
+    CASE 0,1,3
+      ; output with stopping advance
+      $OUT[NO]=STATE
+
+    CASE 2
+      ; output when apo starts
+      TRIGGER WHEN DISTANCE=0 DELAY=0 DO $OUT[NO]=STATE
+
+    DEFAULT
+
+    ENDSWITCH
+
+  ENDIF
+
+END ;(SET_OUTP_ST)
+;=============================
+; FUNCTION : set output pulse
+;    according to sign of NO
+;=============================
+DEF  SET_OUTP_D (NO,STATE,PULSE_TIME,MODE )
+
+  INT NO,MODE
+  REAL PULSE_TIME
+  BOOL STATE
+
+  IF NO<>0 THEN
+
+    SWITCH  MODE ; action immediately or if APO starts
+
+    CASE 0
+      ; output with stopping advance
+      PULSE ($OUT[NO],STATE,PULSE_TIME )
+
+    CASE 1
+      ; output without stopping advance
+      CONTINUE
+      PULSE ($OUT[NO],STATE,PULSE_TIME )
+
+    CASE 2
+      ; output when apo starts
+      NR=NO
+      STS=STATE
+      PS_TIME=PULSE_TIME
+      TRIGGER WHEN DISTANCE=0 DELAY=0 DO PULSE ($OUT[NR],STS,PS_TIME )
+
+    CASE 3
+      ; output with stopping advance
+      PULSE ($OUT[NO],STATE,PULSE_TIME )
+      WAIT FOR  $OUT[NO]<>STATE
+
+    DEFAULT
+
+    ENDSWITCH
+  ENDIF
+
+END ;(SET_OUTP_D)
+;==================================
+; FUNCTION : set output pulse
+;    according to sign of NO
+;==================================
+DEF  SET_OUTP_DST (NO,STATE,PULSE_TIME,MODE )
+
+  INT NO,MODE
+  REAL PULSE_TIME
+  BOOL STATE
+
+  IF NO<>0 THEN
+
+    SWITCH  MODE ; action immediately or if APO starts
+
+    CASE 0 ,1
+      ; output with stopping advance
+      PULSE ($OUT[NO],STATE,PULSE_TIME )
+
+    CASE 2
+      ; output when apo starts
+      NR=NO
+      STS=STATE
+      PS_TIME=PULSE_TIME
+      TRIGGER WHEN DISTANCE=0 DELAY=0 DO PULSE ($OUT[NR],STS,PS_TIME )
+
+    CASE 3
+      ; output with stopping advance
+      PULSE ($OUT[NO],STATE,PULSE_TIME )
+      WAIT FOR  $OUT[NO]<>STATE
+
+    DEFAULT
+
+    ENDSWITCH
+
+  ENDIF
+
+END ;(SET_OUTP_DST)
+;============================
+; FUNCTION : set one output
+;============================
+DEF  SET_OUT1 (OUTP,FCT )
+
+  DECL FCT_OUT_T OUTP
+  INT NO1,NO1_ABS
+  BOOL FCT
+
+  ; get absolut value of input number
+  IF (OUTP.NO<1) THEN
+    NO1=0
+  ELSE
+    NO1=O_WELD_CTRL[OUTP.NO].OUT_NR
+  ENDIF ; (OUTP.NO<1)
+
+  NO1_ABS=ABS(NO1)
+
+  IF NO1_ABS>0 THEN
+
+    IF OUTP.PULS_TIME>0 THEN
+
+      IF FCT THEN
+        PULSE ($OUT[NO1_ABS],OUTP.STATE,OUTP.PULS_TIME )
+      ENDIF
+
+    ELSE
+      $OUT[NO1_ABS]=(OUTP.STATE==FCT)
+    ENDIF ; OUTP.PULS_TIME>0
+
+  ENDIF
+
+END ;(SET_OUT1) 
+;=============================
+; FUNCTION : waits for inputs
+;=============================
+DEFFCT  BOOL WAI_INP(INP)
+
+  DECL FCT_IN_T INP[]
+  INT N,NO1,NO2,NO3,NO1_ABS,NO2_ABS,NO3_ABS,CNT
+
+  IF (INP[1].NO<1) THEN
+    NO1=0
+  ELSE
+    NO1=I_WELD_CTRL[INP[1].NO].IN_NR
+  ENDIF
+  IF (INP[2].NO<1) THEN
+    NO2=0
+  ELSE
+    NO2=I_WELD_CTRL[INP[2].NO].IN_NR
+  ENDIF
+  IF (INP[3].NO<1) THEN
+    NO3=0
+  ELSE
+    NO3=I_WELD_CTRL[INP[3].NO].IN_NR
+  ENDIF
+
+  NO1_ABS=ABS(NO1)
+  NO2_ABS=ABS(NO2)
+  NO3_ABS=ABS(NO3)
+
+  ; avoid fault message
+  IF NO1_ABS==0 THEN
+    NO1_ABS=1
+  ENDIF
+  IF NO2_ABS==0 THEN
+    NO2_ABS=1
+  ENDIF
+  IF NO3_ABS==0 THEN
+    NO3_ABS=1
+  ENDIF
+
+  CNT=0 ; reset counter
+
+  WHILE  (((INP[1].STATE<>$IN[NO1_ABS]) AND (NO1>0)) OR ((INP[2].STATE<>$IN[NO2_ABS]) AND (NO2>0)) OR ((INP[3].STATE<>$IN[NO3_ABS]) AND (NO3>0))) AND (CNT<100*TIME_OUT1)
+
+    IF A_HOT_WELD==#IDLE THEN
+      CNT=100*TIME_OUT1
+    ENDIF
+
+    CNT=CNT+1
+    WAIT SEC 0.012
+
+  ENDWHILE
+
+  IF (CNT>=83*TIME_OUT1) THEN ; n*12 ms
+    RETURN  (FALSE)
+  ELSE
+    RETURN  (TRUE)
+  ENDIF
+
+ENDFCT ;(WAI_INP)
+;------------------------------
+; testing SUBMIT is running
+;------------------------------
+DEF  SPS_RUN (PROG_SPS[] :OUT,ANZAHL :IN )
+
+  DECL INT I,OFFSET,ANZAHL,ANZAHL2
+  DECL BOOL MERKER
+  DECL STATE_T STATE
+  DECL CHAR PROG_SPS[]
+  DECL CHAR NAME_SPS[8]
+
+  LOOP
+    OFFSET=0
+    MERKER=FALSE
+    IF $PRO_STATE0==#P_ACTIVE THEN
+      SREAD($PRO_NAME0[],STATE,OFFSET,"%s",NAME_SPS[])
+      ANZAHL2=STATE.LENGTH
+      IF ANZAHL==ANZAHL2 THEN
+        FOR I=1 TO  ANZAHL
+          IF NAME_SPS[I]<>PROG_SPS[I] THEN
+            MERKER=TRUE
+            EXIT
+          ENDIF
+        ENDFOR
+        IF MERKER==FALSE THEN
+          RETURN 
+        ENDIF
+      ENDIF
+    ENDIF
+    ERR_MSG (0 ) ; Check of the right one submit
+  ENDLOOP
+
+END ;(SPS_RUN)
+;------------------
+; CREATE_LIM
+;------------------
+DEF  CREATE_LIM( )
+
+  INT CODE,I
+
+  CODE=PRG_NO.CODING
+  IF (CODE > 0 ) THEN
+    LIMIT_PRG_NR[CODE]=LIM_PRG_NR()
+  ELSE
+    LIMIT_PRG_NR[CODE]=0
+  ENDIF
+
+  PRGNO_MAX=LIMIT_PRG_NR[CODE]
+
+END ; (CREATE_LIM)
+;---------------------------------
+; Check maximum of program number 
+; depending from mode of coding
+;---------------------------------
+DEFFCT  INT LIM_PRG_NR()
+
+  INT I,CODE,LEN,MAX_PRG
+  INT E,Z,H
+
+  CODE=PRG_NO.CODING
+  LEN =PRG_NO.LENGTH
+
+  IF LEN > 0 THEN
+
+    SWITCH CODE
+
+    CASE 1 ;dual code
+
+      MAX_PRG=1
+
+      FOR I= 1 TO LEN
+        MAX_PRG = MAX_PRG * 2
+      ENDFOR
+
+      MAX_PRG =MAX_PRG-1
+
+    CASE 2 ;code (1:n)
+
+      MAX_PRG=PRG_NO.LENGTH
+
+    CASE 3 ;code (1:n-1)
+
+      MAX_PRG=PRG_NO.LENGTH
+      MAX_PRG=MAX_PRG-1
+
+      IF (MAX_PRG <0) THEN 
+        MAX_PRG=0
+      ENDIF
+
+    CASE 4 ;BCD code
+
+      E=0
+      Z=0
+      H=0
+
+      FOR I=1 TO (PRG_NO.LENGTH)
+        IF E < 9 THEN
+          E=E*2+1
+          IF E>7 THEN
+            E=9
+          ENDIF
+        ELSE
+          IF Z<9 THEN
+            Z=Z*2+1
+            IF Z>7 THEN
+              Z=9
+            ENDIF
+          ELSE
+            IF H<9 THEN
+              H=H*2+1
+              IF H>7 THEN
+                H=9
+              ENDIF
+            ENDIF
+          ENDIF
+        ENDIF
+      ENDFOR
+
+      MAX_PRG=H*100+Z*10+E
+      
+    DEFAULT
+
+    ENDSWITCH
+
+    RETURN (MAX_PRG)
+  ELSE
+    RETURN(0)
+  ENDIF
+
+ENDFCT ;(LIM_PRG_NR )
+;-------------------------------
+; Check BACKWARD.INI adjustments
+;-------------------------------
+DEF  CHECK_BWD( )
+
+  REPEAT
+    IF (($BWD_INFO B_AND 'B1001000') <> 'B1000') THEN
+      ERR_MSG(14);Backward.ini check
+    ENDIF
+  UNTIL (($BWD_INFO B_AND 'B1001000')== 'B1000')
+
+END ;(CHECK_BWD)
+;-----------------------------
+; Set correct Weave Angle
+;-----------------------------
+DEF SET_WEAVE_ANGLE (ANGLE:IN)
+
+  REAL ANGLE
+
+  IF (ABS(ANGLE) >= 179.999) THEN
+
+    IF (ANGLE> 0)  THEN
+      $TECHANGLE.C=  179.99
+    ELSE
+      $TECHANGLE.C= -179.99
+    ENDIF
+
+  ELSE
+    $TECHANGLE.C=ANGLE
+  ENDIF
+
+END ;(SET_WEAVE_ANGLE)

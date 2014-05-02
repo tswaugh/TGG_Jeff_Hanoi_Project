@@ -1,0 +1,11 @@
+&ACCESS  R
+&COMMENT USERSPOT package
+DEFDAT  USERSPOT
+;********************************
+; USERSPOT - Package KR C1
+; V3.2 
+; Date: 23.03.98 
+; 
+;********************************
+
+ENDDAT

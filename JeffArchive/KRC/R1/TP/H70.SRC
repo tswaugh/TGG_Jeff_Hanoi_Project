@@ -1,0 +1,1719 @@
+&ACCESS R
+&COMMENT TOUCH SENSING package
+DEF  H70 (KENNUNG :IN,CD1 :OUT,S_POS :IN,PA :IN,CD2 :IN,CD3 :IN,CD4 :IN,CD5 :IN,CD6 :IN,ADV :IN )
+  ;******************************************
+  ; Function: Touch-Sensor
+  ; 30.10.01  Double touch
+  ;******************************************
+
+  DECL SRCH_TYP_3 PA
+  DECL SRCH_TYP_2 CD1,CD2,CD3,CD4,CD5,CD6
+  INT ADV,KENNUNG
+  E6POS S_POS
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPTS",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  SWITCH  KENNUNG
+
+  CASE 1 ;***********************SRCH_INI***********************************
+
+    HIT_TARGET=TRUE
+
+    IF TOUCH_ON THEN
+      WHILE  ((TOUCH_ACTIVE==0) OR ((TOUCH_O[TOUCH_ACTIVE].OUT_NR)==0) OR ((TOUCH_I[TOUCH_ACTIVE].IN_NR)==0))
+        MESS (8,2 )
+      ENDWHILE
+      IF NEW_REF THEN
+        MESS (11,2 )
+      ENDIF
+      TOUCH_OUT=(TOUCH_O[TOUCH_ACTIVE].OUT_NR)
+      CD0.MES_VAL=-1.0 ; special for CD0-Set in CORR-CMD
+      OV_PRO_OLD=$OV_PRO
+      CONTINUE
+      $OUT[TOUCH_OUT]=FALSE
+      NOTAUS_TOUCH=FALSE
+      ERROR_TOL=FALSE
+      TOUCH_INI ( )
+      $TECH[FG_TOUCH].MODE=#OFF
+      FG_ON_WORK=FALSE
+      DOUBLE_TOUCH=0
+    ELSE
+      MESS (12,1 )
+    ENDIF
+
+  CASE 2 ;**********************touch on***************************************
+
+    HIT_TARGET=TRUE ; RESET Target Flag  
+
+    IF H70_OPTION==FALSE THEN
+      REPEAT
+        MESS (17,2 )
+      UNTIL H70_OPTION==TRUE
+    ELSE
+      IF (TOUCH_ON AND ($PRO_MODE==#GO) AND (TOUCH_OUT>0)) THEN
+        CONTINUE
+        $OUT[TOUCH_OUT]=TRUE
+        CONTINUE
+        WAIT SEC DELAY_TIME
+      ENDIF
+    ENDIF
+
+  CASE 3 ;**********************SRCH_SGL_TCH**********************************
+
+    IF TOUCH_ON THEN
+      DOUBLE_TOUCH=0
+      CD_GLOBAL=CD1
+      PA_GLOBAL=PA
+      PREPARE_SRCH (CD1,S_POS,PA )
+      ROT_BASE (0 )
+      M_DIR_W ( )
+      TOUCH=FALSE
+      FG_MOVEMENT ( )
+      RE_DEFINE_FG (CD1 )
+    ENDIF
+
+  CASE 4 ;*********INTERRUPT von  IR_STOP_MESS / TECHSTOP:STOERUNG ******** 
+
+    IF FG_ON_WORK THEN
+      INTERRUPT OFF 15
+      $OUT[TOUCH_OUT]=FALSE
+      NOTAUS_TOUCH=TRUE ; Flag fuer STOERUNG
+      IF $OV_PRO==0 THEN
+        $OV_PRO=OV_PRO_OLD
+      ENDIF
+    ENDIF
+
+  CASE 5 ;************************SRCH_DB_TCH******************************
+
+    IF TOUCH_ON THEN
+      TOUCH=FALSE
+      DOUBLE_TOUCH=1
+      CD_GLOBAL=CD1
+      PA_GLOBAL=PA
+      PREPARE_SRCH (CD1,S_POS,PA )
+      ROT_BASE (1 )
+      M_DIR_W ( )
+      FG_MOVEMENT ( )
+      CD_GLOBAL.SRCH_OK=FALSE
+      INTERRUPT OFF 15
+      INTERRUPT OFF 16
+      INTERRUPT OFF 17
+      DOUBLE_TOUCH=2
+      WAIT SEC 0.1
+      $OUT[TOUCH_OUT]=TRUE
+      FG_ON_WORK=TRUE
+      PREPARE_SRCH (CD1,S_POS,PA )
+      ROT_BASE (2 )
+      TOUCH=FALSE
+      WAIT SEC 0.01
+      FG_MOVEMENT ( )
+      RE_DEFINE_FG (CD1 )
+    ENDIF
+
+  CASE 6 ;***************INTERRUPT 15: TOUCH-INTERRUPT*********************
+
+    INTERRUPT OFF 15
+    CONTINUE
+    $OUT[TOUCH_OUT]=FALSE
+    WAIT FOR  $TECHPAR_C[FG_TOUCH,7]>=0.5
+    $OV_PRO=OV_PRO_OLD
+    TOUCH_INT (CD_GLOBAL )
+    FG_ON_WORK=FALSE
+    TOUCH=TRUE
+    NOTAUS_TOUCH=FALSE
+    INTERRUPT OFF 16
+
+  CASE 7 ;**************INTERRUPT 16: SRCH_OV_NULL(#GO-Betrieb)***************                             
+
+    IF $MEAS_PULSE[TOUCH_I[TOUCH_ACTIVE].IN_NR] THEN
+      MESS (15,2 )
+      LOOP
+        MESS (16,2 )
+      ENDLOOP
+    ENDIF
+    OV_PRO_OLD=$OV_PRO
+    $OV_PRO=0
+    INTERRUPT ON 15
+    CONTINUE
+    $OUT[TOUCH_OUT]=TRUE
+    WAIT FOR  $TECH_C[FG_TOUCH].MODE==#OFF
+    WAIT SEC RELAY_TIME ;Touch-Spannung muss stabil anstehen
+    $TECH_C[FG_TOUCH].MODE=#CYCLE
+    FG_ON_WORK=TRUE
+
+  CASE 8 ;*******INTERRUPT 17: LIMIT DES SUCHWEGES**********
+
+    INTERRUPT OFF 15
+    INTERRUPT OFF 16
+    INTERRUPT OFF 17
+    WAIT FOR  $TECHPAR_C[FG_TOUCH,7]>=0.5
+    BRAKE
+
+    SUCHWEG_ENDE=TRUE
+    $OV_PRO=OV_PRO_OLD
+
+    IF TOUCH_OUT>0 THEN
+      $OUT[TOUCH_OUT]=FALSE ;switch off of the touch voltage
+    ENDIF
+
+    IF DECIDE_MODE==TRUE THEN
+      HIT_TARGET=FALSE
+    ELSE
+      MESS (3,1 )
+    ENDIF
+
+  CASE 10 ;***********************CORR***************************************
+
+    $TECHANGLE.A=0
+    $TECHANGLE.B=0
+    $TECHANGLE.C=0
+    INTERRUPT OFF 15
+    INTERRUPT OFF 16
+    INTERRUPT OFF 17
+
+    IF ADV==1 THEN
+      IF TOUCH_ON THEN
+        CORR (CD1,CD2,CD3,CD4,CD5,CD6 )
+      ENDIF
+    ELSE
+      ADV_OLD=$ADVANCE
+      $ADVANCE=0
+      IF TOUCH_ON THEN
+        CORR (CD1,CD2,CD3,CD4,CD5,CD6 )
+      ENDIF
+      $ADVANCE=ADV_OLD
+    ENDIF
+
+  CASE 11 ;**********************movement to search point****************************
+
+    IF ($PRO_MODE<>#GO) AND ($MODE_OP==#T1) THEN
+      LIN  S_POS
+      MESS (10,2 )
+    ENDIF
+
+  CASE 12 ;**********************write s_pos to start_pos*****************************
+
+    START_POS=S_POS
+
+  CASE 13 ;**********************calculate dirX,dirYdirZ******************************
+
+    CD1.B_X=S_POS.X-START_POS.X
+    CD1.B_Y=S_POS.Y-START_POS.Y
+    CD1.B_Z=S_POS.Z-START_POS.Z
+
+  DEFAULT
+
+    MESS (4,1 )
+
+  ENDSWITCH
+
+END ; --------------------------END OF MAIN PROGRAMM ----------------------
+
+DEF  RE_DEFINE_FG (CD1 :OUT )
+
+  DECL SRCH_TYP_2 CD1
+
+  IF ABS(CD_GLOBAL.OFFSET)>ABS(PA_GLOBAL.TOL) THEN
+    ERROR_TOL=TRUE
+  ELSE
+    ERROR_TOL=FALSE
+  ENDIF
+
+  CD_GLOBAL.SRCH_OK=FALSE
+
+  IF (($MODE_OP<>#T1) AND TOUCH AND  NOT NOTAUS_TOUCH AND  NOT SUCHWEG_ENDE AND  NOT ERROR_TOL) THEN
+    CD_GLOBAL.SRCH_OK=TRUE
+    IF CD_GLOBAL.CAL_MODE OR NEW_REF THEN
+      CD_GLOBAL.CAL_MODE=FALSE
+    ENDIF
+  ENDIF
+
+  INTERRUPT OFF 15
+  INTERRUPT OFF 16
+  INTERRUPT OFF 17
+
+
+  IF ERROR_TOL THEN
+    MESS (2,1 ) ; Toleranzfehler
+  ENDIF
+
+  IF ($MODE_OP==#T1) THEN
+    MESS (13,1 ) ; Messwert ungueltig , da T1
+  ENDIF
+
+  CD1=CD_GLOBAL ; 
+
+  $TECHANGLE.A=0.0
+  $TECHANGLE.B=0.0
+  $TECHANGLE.C=0.0
+
+  $TECHSYS=#TTS ; prepared for welding
+
+END ;(CHECK_REBILD )
+
+DEF  FG_MOVEMENT ( )
+
+  BOOL MEM_ERROR ; flag in case of Techstop or IR_STOPMESS
+
+  LIN_REL {X 0.01}
+  MEM_ERROR=FALSE
+  SUCHWEG_ENDE=FALSE
+
+  REPEAT
+
+    IF NOTAUS_TOUCH THEN
+      FG_ON_WORK=FALSE
+      MEM_ERROR=TRUE
+      NOTAUS_TOUCH=FALSE
+      INTERRUPT OFF 15
+      INTERRUPT OFF 16
+      INTERRUPT OFF 17
+      IF $ON_PATH==FALSE THEN
+        LIN  $POS_RET
+      ENDIF
+    ENDIF
+
+    IF (($PRO_MODE<>#GO) OR (SUCHWEG_ENDE) OR (MEM_ERROR==TRUE)) THEN
+      CONTINUE
+      INTERRUPT OFF 15
+      $OUT[TOUCH_OUT]=TRUE
+      CONTINUE
+      WAIT SEC 0.2
+      IF $MEAS_PULSE[TOUCH_I[TOUCH_ACTIVE].IN_NR] THEN
+        MESS (15,2 )
+      ENDIF
+      OV_PRO_OLD=$OV_PRO
+      $OV_PRO=0
+      CONTINUE
+      WAIT SEC RELAY_TIME
+      INTERRUPT ON 15 ;Touch-ISR
+      $TECH[FG_TOUCH].MODE=#CYCLE
+      REPEAT
+      UNTIL $TECH[FG_TOUCH].MODE==#CYCLE
+      FG_ON_WORK=TRUE
+      INTERRUPT ON 16
+      INTERRUPT ON 17
+      LIN_REL  {X 0.01} C_DIS
+    ELSE ;(#GO)
+      LIN_REL  {X 0.01} C_DIS ;Aktivierung ISR 15 in ISR16 suche ueber NULL 
+      LIN_REL  {X 0.0} C_DIS ;zur ISR16 Ausloesung
+      $RED_VEL=TOUCH_RED
+      LIN_REL  DISTC_EXACT
+      $RED_VEL=100
+    ENDIF
+
+    REPEAT
+    UNTIL (SUCHWEG_ENDE OR TOUCH OR NOTAUS_TOUCH)
+
+    IF SUCHWEG_ENDE THEN
+      INTERRUPT ON 17
+    ENDIF
+
+  UNTIL ((TOUCH AND  NOT (NOTAUS_TOUCH)) OR SUCHWEG_ENDE)
+  $TECH[FG_TOUCH].MODE=#OFF
+
+END ;(FG_MOVEMENT)
+
+DEF  PREPARE_SRCH (CD1 :OUT,S_POS :IN,PA :IN )
+  DECL SRCH_TYP_3 PA
+  DECL E6POS S_POS
+  DECL SRCH_TYP_2 CD1
+
+  WHILE  ((CD1.B_X+CD1.B_Y+CD1.B_Z)==0)
+    MESS (9,2 )
+  ENDWHILE
+
+  $TECH[FG_TOUCH].MODE=#OFF
+  INTERRUPT ON 16
+  INTERRUPT ON 17
+  $TECHSYS=#BASE
+  START_POS=S_POS
+  IF ($PRO_MODE<>#GO) AND ($MODE_OP==#T1) THEN
+    $TECHPAR[FG_TOUCH,6]=PA_GLOBAL.TOL+(PA_GLOBAL.VEL/6)
+  ELSE
+    $TECHPAR[FG_TOUCH,6]=SQRT((CD1.B_X*CD1.B_X)+(CD1.B_Y*CD1.B_Y)+(CD1.B_Z*CD1.B_Z))+PA_GLOBAL.TOL+(PA_GLOBAL.VEL/6)
+  ENDIF
+
+  IF $MODE_OP==#T1 THEN
+    IF $OV_PRO<$RED_T1 THEN
+      $TECHPAR[FG_TOUCH,4]=PA_GLOBAL.VEL*$OV_PRO/100 ;search speed
+    ELSE
+      $TECHPAR[FG_TOUCH,4]=PA_GLOBAL.VEL*$RED_T1/100 ;search speed
+    ENDIF
+    $TECHPAR[FG_TOUCH,2]=TCH_OFS_LEAV*PA_GLOBAL.DIST*$RED_T1/10000 ;ret speed
+    $TECHPAR[FG_TOUCH,1]=TCH_RET_ACC*PA.RET*$RED_T1/10000 ;ret acc
+  ENDIF
+
+  IF ($MODE_OP<>#T1) THEN
+    $TECHPAR[FG_TOUCH,4]=PA_GLOBAL.VEL ;search speed
+    $TECHPAR[FG_TOUCH,2]=TCH_OFS_LEAV*PA_GLOBAL.DIST/100 ;ret speed
+    $TECHPAR[FG_TOUCH,1]=TCH_RET_ACC*PA.RET/100 ;ret acc
+  ENDIF
+
+END ;(PREPARE_SRCH)
+
+DEF  ROT_BASE (FG_DIR :IN )
+  ;*****************************
+  ; Function: rotation angles
+  ;           for FG movement
+  ;*****************************
+
+  INT FG_DIR
+  REAL HILF_DIR_X
+
+  HILF_DIR_X=CD_GLOBAL.B_X
+
+  IF ((FG_DIR==0) OR (FG_DIR==1)) THEN ; normal SEARCH_PRE
+    ROT_B=ARCTAN2(-(CD_GLOBAL.B_Z),(SQRT(CD_GLOBAL.B_X*CD_GLOBAL.B_X+CD_GLOBAL.B_Y*CD_GLOBAL.B_Y)))
+    ROT_A=ARCTAN2(CD_GLOBAL.B_Y,HILF_DIR_X)
+  ENDIF
+
+  IF FG_DIR==2 THEN ; second PRESEARCH   double touch
+    ROT_B=ARCTAN2((CD_GLOBAL.B_Z),(SQRT(CD_GLOBAL.B_X*CD_GLOBAL.B_X+CD_GLOBAL.B_Y*CD_GLOBAL.B_Y)))
+    ROT_A=ARCTAN2(-CD_GLOBAL.B_Y,-HILF_DIR_X)
+  ENDIF
+
+  $TECHANGLE.A=ROT_A
+  $TECHANGLE.B=ROT_B
+
+END
+
+DEF  M_DIR_W ( )
+  ;*****************************
+  ; Function: calculate search
+  ;           direction in world
+  ;*****************************
+
+  FRAME HELP_BASE
+  FRAME DIR_B_FR,DIR_W_FR
+
+
+  IF (CD_GLOBAL.CAL_MODE OR NEW_REF) THEN
+
+    DIR_B_FR.X=CD_GLOBAL.B_X ; only direction vector necessary
+    DIR_B_FR.Y=CD_GLOBAL.B_Y
+    DIR_B_FR.Z=CD_GLOBAL.B_Z
+    DIR_B_FR.A=0
+    DIR_B_FR.B=0
+    DIR_B_FR.C=0
+
+    IF $ACT_BASE>=0 THEN
+      IF $ACT_BASE==0 THEN
+        HELP_BASE=$NULLFRAME
+      ELSE
+        HELP_BASE=BASE_DATA[$ACT_BASE]
+      ENDIF
+    ELSE
+      IF $ACT_EX_AX>0 THEN
+        HELP_BASE=EX_AX_DATA[$ACT_EX_AX].OFFSET
+      ELSE
+        MESS (1,1 )
+      ENDIF
+    ENDIF
+
+    HELP_BASE.X=0
+    HELP_BASE.Y=0
+    HELP_BASE.Z=0
+    DIR_W_FR=HELP_BASE:DIR_B_FR
+    CD_GLOBAL.W_X=DIR_W_FR.X
+    CD_GLOBAL.W_Y=DIR_W_FR.Y
+    CD_GLOBAL.W_Z=DIR_W_FR.Z
+
+  ENDIF
+
+END ;(M_DIR_W)
+
+
+DEF  TOUCH_INI ( )
+  ;***************************
+  ; Function: Initialisation
+  ;           Touch Sensor
+  ;***************************
+
+  $TECH[FG_TOUCH].CLASS=#TOUCH
+  $TECHSYS=#BASE
+  $TECH[FG_TOUCH].FCTCTRL.GEOREF=#X
+  $TECHANGLE.A=0 ;ROT_A
+  $TECHANGLE.B=0 ;ROT_B
+  $TECHANGLE.C=0
+
+
+  $TECHPAR[FG_TOUCH,1]=0 ;BREMSRAMPE
+  $TECHPAR[FG_TOUCH,2]=TCH_OFS_LEAV ;V_MAX ABBAU --> T2
+  $TECHPAR[FG_TOUCH,3]=0 ;FAKTOR RUECKG
+  $TECHPAR[FG_TOUCH,4]=0 ;SUCHGESCHW
+  $TECHPAR[FG_TOUCH,5]=0.1 ;GLAETT AUFBAU
+  $TECHPAR[FG_TOUCH,6]=10 ;MAX WEG
+
+END
+
+
+DEF  TOUCH_INT (CD1 :OUT )
+  ;***************************
+  ; Function: Interrupt routine
+  ;           Int-position
+  ;***************************
+
+  DECL SRCH_TYP_2 CD1
+
+  REAL DELTA_X,DELTA_Y,DELTA_Z,ZW_A,ZW_B,ZW_C
+
+  IF $ACT_BASE>=0 THEN
+    IF $ACT_BASE<=0 THEN
+      IF BASE_CORR_ON THEN
+        HILF_BASE=$BASE_C
+      ELSE
+        HILF_BASE=$NULLFRAME
+      ENDIF
+    ELSE
+      IF BASE_CORR_ON THEN
+        HILF_BASE=$BASE_C
+      ELSE
+        HILF_BASE=BASE_DATA[$ACT_BASE]
+      ENDIF
+    ENDIF
+  ELSE
+    IF $ACT_EX_AX>0 THEN
+      IF BASE_CORR_ON THEN
+        HILF_BASE=BASE_CORR:EX_AX_DATA[$ACT_EX_AX].OFFSET
+      ELSE
+        HILF_BASE=EX_AX_DATA[$ACT_EX_AX].OFFSET
+      ENDIF
+    ELSE
+      MESS (1,1 )
+    ENDIF
+  ENDIF
+
+  WORLD_POS=HILF_BASE:$POS_INT
+  BASE_POS=$POS_INT
+
+
+  SWITCH  DOUBLE_TOUCH
+
+  CASE 0
+
+    ; distance between startposition and interruptposition in each direction
+    DELTA_X=START_POS.X-BASE_POS.X
+    DELTA_Y=START_POS.Y-BASE_POS.Y
+    DELTA_Z=START_POS.Z-BASE_POS.Z
+
+    ;calibration of reference part
+    IF (CD_GLOBAL.CAL_MODE OR NEW_REF) THEN
+      CD_GLOBAL.CAL_VAL=SQRT(DELTA_X*DELTA_X+DELTA_Y*DELTA_Y+DELTA_Z*DELTA_Z) ;Euclidian Norm 
+
+      CD_GLOBAL.REF_X=WORLD_POS.X ;saving interruptposition of reference point
+      CD_GLOBAL.REF_Y=WORLD_POS.Y
+      CD_GLOBAL.REF_Z=WORLD_POS.Z
+
+      IF (($MODE_OP<>#T1) AND TOUCH AND  NOT NOTAUS_TOUCH AND  NOT SUCHWEG_ENDE AND  NOT ERROR_TOL) THEN
+        CD_GLOBAL.CAL_MODE=FALSE ;reference point is calibrated
+      ENDIF
+    ENDIF
+
+    CD_GLOBAL.MES_VAL=SQRT(DELTA_X*DELTA_X+DELTA_Y*DELTA_Y+DELTA_Z*DELTA_Z) ;Euclidian Norm 
+    CD_GLOBAL.OFFSET=CD_GLOBAL.MES_VAL-CD_GLOBAL.CAL_VAL ;difference between reference- and measurement point
+    CD_GLOBAL.MES_X=WORLD_POS.X ;saving interruptposition of measurement point
+    CD_GLOBAL.MES_Y=WORLD_POS.Y
+    CD_GLOBAL.MES_Z=WORLD_POS.Z
+
+    IF ABS(CD_GLOBAL.OFFSET)>ABS(PA_GLOBAL.TOL) THEN
+      ERROR_TOL=TRUE
+    ELSE
+      ERROR_TOL=FALSE
+    ENDIF
+
+  CASE 1 ; TOUCH after first double touch
+
+    INT_POS1.X=BASE_POS.X
+    INT_POS1.Y=BASE_POS.Y
+    INT_POS1.Z=BASE_POS.Z
+
+    DELTA_DT.X=START_POS.X-BASE_POS.X ; First ISR-TOUCH of DT
+    DELTA_DT.Y=START_POS.Y-BASE_POS.Y
+    DELTA_DT.Z=START_POS.Z-BASE_POS.Z
+
+    IF (CD_GLOBAL.CAL_MODE OR NEW_REF) THEN
+
+      REF_DT1.X=WORLD_POS.X
+      REF_DT1.Y=WORLD_POS.Y
+      REF_DT1.Z=WORLD_POS.Z
+
+    ENDIF
+
+    MES_DT1.X=WORLD_POS.X
+    MES_DT1.Y=WORLD_POS.Y
+    MES_DT1.Z=WORLD_POS.Z
+
+
+
+  CASE 2
+
+    INT_POS2.X=BASE_POS.X
+    INT_POS2.Y=BASE_POS.Y
+    INT_POS2.Z=BASE_POS.Z
+
+    ZW_A=ABS(DELTA_DT.X)+ABS(START_POS.X-BASE_POS.X) ; real width as sum
+    ZW_B=ABS(DELTA_DT.Y)+ABS(START_POS.Y-BASE_POS.Y)
+    ZW_C=ABS(DELTA_DT.Z)+ABS(START_POS.Z-BASE_POS.Z)
+
+    CD_GLOBAL.TCH_RESULT_A=SQRT(ZW_A*ZW_A+ZW_B*ZW_B+ZW_C*ZW_C) ; real width as euclidian Norm [mm]
+
+    ;calculating distance to startpunkt to optimized point of the mid (3dimensions) in any base
+    DELTA_DT=CALC_MID(INT_POS1,INT_POS2,START_POS)
+
+    IF (CD_GLOBAL.CAL_MODE OR NEW_REF) THEN ; reference part
+      CD_GLOBAL.TCH_RESULT_B=CD_GLOBAL.TCH_RESULT_A ; save real width as euclidian Norm [mm]
+
+      CD_GLOBAL.CAL_VAL=SQRT(DELTA_DT.X*DELTA_DT.X+DELTA_DT.Y*DELTA_DT.Y+DELTA_DT.Z*DELTA_DT.Z)
+      ; distance from startpoint to optimized mid
+      CD_GLOBAL.REF_X=(REF_DT1.X+WORLD_POS.X)/2.0 ; mid of both touches three directions
+      CD_GLOBAL.REF_Y=(REF_DT1.Y+WORLD_POS.Y)/2.0
+      CD_GLOBAL.REF_Z=(REF_DT1.Z+WORLD_POS.Z)/2.0
+
+      IF (($MODE_OP<>#T1) AND TOUCH AND  NOT NOTAUS_TOUCH AND  NOT SUCHWEG_ENDE AND  NOT ERROR_TOL) THEN
+        CD_GLOBAL.CAL_MODE=FALSE
+      ENDIF
+    ENDIF
+
+    CD_GLOBAL.MES_VAL=SQRT(DELTA_DT.X*DELTA_DT.X+DELTA_DT.Y*DELTA_DT.Y+DELTA_DT.Z*DELTA_DT.Z)
+    ; distance from startpoint to optimized mid
+    CD_GLOBAL.MES_X=(MES_DT1.X+WORLD_POS.X)/2.0 ; mid of both touches three directions
+    CD_GLOBAL.MES_Y=(MES_DT1.Y+WORLD_POS.Y)/2.0
+    CD_GLOBAL.MES_Z=(MES_DT1.Z+WORLD_POS.Z)/2.0
+
+    CD_GLOBAL.OFFSET=CD_GLOBAL.MES_VAL-CD_GLOBAL.CAL_VAL ; distance between optimized mids
+
+    IF ABS(CD_GLOBAL.OFFSET)>ABS(PA_GLOBAL.TOL) THEN
+      ERROR_TOL=TRUE
+    ELSE
+      ERROR_TOL=FALSE
+    ENDIF
+
+  ENDSWITCH
+
+  FG_ON_WORK=FALSE
+
+END ;(TOUCH_INT) 
+;----------------------------------------------------------------------------------
+DEFFCT  POS_XYZ CALC_MID(VW :IN,RW :IN,STRTPKT :IN) ; Display-function 
+
+  DECL POS_XYZ VW,RW,MID
+  DECL E6POS STRTPKT
+
+  IF ((VW.X>0) AND (RW.X>0)) OR ((VW.X<0) AND (RW.X<0)) THEN
+    MID.X=(VW.X+RW.X)/2-STRTPKT.X
+  ELSE
+    IF (VW.X<0) AND (RW.X>0) THEN
+      MID.X=((ABS(VW.X)+RW.X)/2.0-STRTPKT.X)
+      IF ABS(VW.X)>RW.X THEN
+        MID.X=MID.X*(-1.0)
+      ENDIF
+    ENDIF
+    IF (RW.X<0) AND (VW.X>0) THEN
+      MID.X=((ABS(RW.X)+VW.X)/2.0-STRTPKT.X)
+      IF ABS(RW.X)>VW.X THEN
+        MID.X=MID.X*(-1.0)
+      ENDIF
+    ENDIF
+  ENDIF
+  IF ((VW.Y>0) AND (RW.Y>0)) OR ((VW.Y<0) AND (RW.Y<0)) THEN
+    MID.Y=(VW.Y+RW.Y)/2-STRTPKT.Y
+  ELSE
+    IF (VW.Y<0) AND (RW.Y>0) THEN
+      MID.Y=((ABS(VW.Y)+RW.Y)/2.0-STRTPKT.Y)
+      IF ABS(VW.Y)>RW.Y THEN
+        MID.Y=MID.Y*(-1.0)
+      ENDIF
+    ENDIF
+    IF (RW.Y<0) AND (VW.Y>0) THEN
+      MID.Y=((ABS(RW.Y)+VW.Y)/2.0-STRTPKT.Y)
+      IF ABS(RW.Y)>VW.Y THEN
+        MID.Y=MID.Y*(-1.0)
+      ENDIF
+    ENDIF
+  ENDIF
+  IF ((VW.Z>0) AND (RW.Z>0)) OR ((VW.Z<0) AND (RW.Z<0)) THEN
+    MID.Z=(VW.Z+RW.Z)/2-STRTPKT.Z
+  ELSE
+    IF (VW.Z<0) AND (RW.Z>0) THEN
+      MID.Z=((ABS(VW.Z)+RW.Z)/2.0-STRTPKT.Z)
+      IF ABS(VW.Z)>RW.Z THEN
+        MID.Z=MID.Z*(-1.0)
+      ENDIF
+    ENDIF
+    IF (RW.Z<0) AND (VW.Z>0) THEN
+      MID.Z=((ABS(RW.Z)+VW.Z)/2.0-STRTPKT.Z)
+      IF ABS(RW.Z)>VW.Z THEN
+        MID.Z=MID.Z*(-1.0)
+      ENDIF
+    ENDIF
+  ENDIF
+  RETURN  (MID)
+
+ENDFCT ;(CALC_MID)
+
+DEF  CORR (CD1,CD2,CD3,CD4,CD5,CD6 )
+  ;***************************
+  ; Function: calculation of
+  ;           base-movement
+  ;***************************
+
+  DECL SRCH_TYP_2 CD1,CD2,CD3,CD4,CD5,CD6
+
+  REAL SYS_1[3,3],SYS_2[3,3],O123[3,3],O45[3,3]
+  REAL O6[3,3],T123[3],A[3,3],B[3]
+  REAL N1[3],N4[3],N6[3],N1S[3],N4S[3],N6S[3],P1[3],P2[3],P3[3]
+  REAL P4[3],P5[3],P6[3],P1S[3],P2S[3],P3S[3],P4S[3],P5S[3]
+  REAL P6S[3],P2L[3],P2SL[3],P4TEMP[3],P5TEMP[3],P6TEMP[3],N4TEMP[3]
+  REAL V4TEMP[3],V4S[3],Q4S[3],Q4TEMP[3],P4SL[3],P4TEMPL[3]
+  REAL C1,C2,C3,C4,C5,C6,C1S,C4S,C6S,C4TEMP,C5TEMP,C6TEMP,NENNER
+  FRAME Z_VEK,OLD_BASE,BASE_ORI,F123,F45,F6,F12345,F123456,F_P6
+  FRAME F_P6TEMP,F_N6,F_N6S
+  INT I,J
+
+  IF ((CD1.MES_VAL==-1.0) AND (CD2.MES_VAL==-1.0) AND (CD3.MES_VAL==-1.0) AND (CD4.MES_VAL==-1.0) AND (CD5.MES_VAL==-1.0) AND (CD6.MES_VAL==-1.0)) THEN
+
+    BASE_CORR_ON=FALSE
+    BASE_CORR=$NULLFRAME
+
+    CONTINUE
+    IF ($ACT_BASE >= 0) THEN
+      CONTINUE
+      IF $ACT_BASE==0 THEN
+        $BASE=$WORLD
+      ELSE
+        CONTINUE
+        $BASE=BASE_DATA[$ACT_BASE]
+      ENDIF
+
+    ELSE ;EX_AX_DATAS
+
+      CONTINUE
+      IF $ACT_EX_AX>0 THEN
+        CONTINUE
+        $BASE=EK(EX_AX_DATA[$ACT_EX_AX].ROOT,EX_AX_DATA[$ACT_EX_AX].EX_KIN,EX_AX_DATA[$ACT_EX_AX].OFFSET)
+      ENDIF
+
+    ENDIF
+
+  ELSE
+    BASE_CORR_ON=TRUE
+  ENDIF
+
+
+  IF BASE_CORR_ON==TRUE THEN
+
+    WHILE   NOT ((CD1.SRCH_OK) AND (CD2.SRCH_OK) AND (CD3.SRCH_OK) AND (CD4.SRCH_OK) AND (CD5.SRCH_OK) AND (CD6.SRCH_OK))
+      MESS (7,2 ) ; one search set is wrong
+    ENDWHILE
+
+    P1[1]=CD1.REF_X
+    P1[2]=CD1.REF_Y
+    P1[3]=CD1.REF_Z
+
+    P2[1]=CD2.REF_X
+    P2[2]=CD2.REF_Y
+    P2[3]=CD2.REF_Z
+
+    P3[1]=CD3.REF_X
+    P3[2]=CD3.REF_Y
+    P3[3]=CD3.REF_Z
+
+    P4[1]=CD4.REF_X
+    P4[2]=CD4.REF_Y
+    P4[3]=CD4.REF_Z
+
+    P5[1]=CD5.REF_X
+    P5[2]=CD5.REF_Y
+    P5[3]=CD5.REF_Z
+
+    P6[1]=CD6.REF_X
+    P6[2]=CD6.REF_Y
+    P6[3]=CD6.REF_Z
+
+
+    P1S[1]=CD1.MES_X
+    P1S[2]=CD1.MES_Y
+    P1S[3]=CD1.MES_Z
+
+    P2S[1]=CD2.MES_X
+    P2S[2]=CD2.MES_Y
+    P2S[3]=CD2.MES_Z
+
+    P3S[1]=CD3.MES_X
+    P3S[2]=CD3.MES_Y
+    P3S[3]=CD3.MES_Z
+
+    P4S[1]=CD4.MES_X
+    P4S[2]=CD4.MES_Y
+    P4S[3]=CD4.MES_Z
+
+    P5S[1]=CD5.MES_X
+    P5S[2]=CD5.MES_Y
+    P5S[3]=CD5.MES_Z
+
+    P6S[1]=CD6.MES_X
+    P6S[2]=CD6.MES_Y
+    P6S[3]=CD6.MES_Z
+
+
+    IF $ACT_BASE>=0 THEN
+      IF $ACT_BASE==0 THEN
+        OLD_BASE=$NULLFRAME
+      ELSE
+        OLD_BASE=BASE_DATA[$ACT_BASE]
+      ENDIF
+    ELSE
+      IF $ACT_EX_AX>0 THEN
+        OLD_BASE=EX_AX_DATA[$ACT_EX_AX].OFFSET
+      ELSE
+        MESS (1,1 )
+      ENDIF
+    ENDIF
+
+    BASE_ORI=OLD_BASE
+    BASE_ORI.X=0.0
+    BASE_ORI.Y=0.0
+    BASE_ORI.Z=0.0
+
+
+    ; CORR P1, P2, P3:
+    ;-----------------
+    F123=$NULLFRAME
+
+    IF ((CD1.MES_VAL==-1.0) AND (CD2.MES_VAL==-1.0)) THEN
+      Z_VEK=$NULLFRAME
+      Z_VEK.Z=1.0
+      Z_VEK=BASE_ORI:Z_VEK
+      N1S[1]=Z_VEK.X
+      N1S[2]=Z_VEK.Y
+      N1S[3]=Z_VEK.Z
+
+      C1S=0.0
+    ELSE
+
+
+      N1[1]=CD1.W_X
+      N1[2]=CD1.W_Y
+      N1[3]=CD1.W_Z
+
+      IF VEK_LAENGE(N1[],3)<0.001 THEN
+        REPEAT
+          MESS (5,2 ) ; error on search direction
+        UNTIL FALSE
+      ENDIF
+
+
+      NORM_VEK (N1[],3 )
+
+      IF ((CD1.MES_VAL<>-1.0) AND (CD2.MES_VAL==-1.0)) THEN
+
+        F123.X=P1S[1]-P1[1]
+        F123.Y=P1S[2]-P1[2]
+        F123.Z=P1S[3]-P1[3]
+
+        N1S[1]=N1[1]
+        N1S[2]=N1[2]
+        N1S[3]=N1[3]
+
+        C1S=SKAL_PROD(N1S[],P1S[],3)
+
+      ELSE
+
+        C1=SKAL_PROD(N1[],P1[],3)
+        C2=SKAL_PROD(N1[],P2[],3)
+        C3=SKAL_PROD(N1[],P3[],3)
+
+        FOR J=1 TO  3
+          A[1,J]=P2S[J]-P1S[J]
+          A[2,J]=P3S[J]-P1S[J]
+        ENDFOR
+        B[1]=C2-C1
+        B[2]=C3-C1
+
+        SOLVE_2X3 (A[,],B[],N1[],N1S[] )
+
+        C1S=SKAL_PROD(N1S[],P1S[],3)
+
+        PROJEC_PLANE (N1[],P1[],P2[],P2L[] )
+        PROJEC_PLANE (N1S[],P1S[],P2S[],P2SL[] )
+
+        FOR I=1 TO  3
+          SYS_1[1,I]=P1[I]
+          SYS_2[1,I]=P1S[I]
+
+          SYS_1[2,I]=P2L[I]
+          SYS_2[2,I]=P2SL[I]
+
+          SYS_1[3,I]=P1[I]+N1[I]
+          SYS_2[3,I]=P1S[I]+N1S[I]
+        ENDFOR
+
+        F123=SYS1_2_INV(SYS_1[,],SYS_2[,])
+      ENDIF
+    ENDIF
+
+
+    ; CORR P4, P5:
+    ;-------------
+
+    F45=$NULLFRAME
+
+    IF ((CD4.MES_VAL==-1) AND (CD5.MES_VAL==-1)) THEN
+      Y_VEK=$NULLFRAME
+      Y_VEK.Y=1.0
+      Y_VEK=BASE_ORI:Y_VEK
+      N4S[1]=Y_VEK.X
+      N4S[2]=Y_VEK.Y
+      N4S[3]=Y_VEK.Z
+      IF ((ABS(N4S[1])<1E-04) AND (ABS(N4S[2])<1E-04) AND (ABS(N4S[3])<1E-04)) THEN
+        REPEAT
+          MESS (14,1 )
+        UNTIL FALSE
+      ENDIF
+
+      KREUZ_PROD (N1S[],N4S[],V4S[] )
+      NORM_VEK (V4S[],3 )
+
+    ELSE
+      N4[1]=CD4.W_X
+      N4[2]=CD4.W_Y
+      N4[3]=CD4.W_Z
+
+      IF VEK_LAENGE(N4[],3)<0.001 THEN
+        REPEAT
+          MESS (5,1 ) ; error on search direction
+        UNTIL FALSE
+      ENDIF
+
+      NORM_VEK (N4[],3 )
+
+      RPY_TO_MAT (O123[,],F123.A,F123.B,F123.C )
+      T123[1]=F123.X
+      T123[2]=F123.Y
+      T123[3]=F123.Z
+
+      MAT_MAL_VEK (O123[,],P4[],P4TEMP[],3,3 )
+      MAT_MAL_VEK (O123[,],P5[],P5TEMP[],3,3 )
+      FOR I=1 TO  3
+        P4TEMP[I]=P4TEMP[I]+T123[I]
+        P5TEMP[I]=P5TEMP[I]+T123[I]
+      ENDFOR
+
+      MAT_MAL_VEK (O123[,],N4[],N4TEMP[],3,3 )
+
+      C4TEMP=SKAL_PROD(N4TEMP[],P4TEMP[],3)
+      C5TEMP=SKAL_PROD(N4TEMP[],P5TEMP[],3)
+
+
+      IF ((CD4.MES_VAL<>-1) AND (CD5.MES_VAL==-1)) THEN
+        PROJEC_PLANE (N1S[],P1S[],P4S[],P4SL[] )
+        PROJEC_PLANE (N1S[],P1S[],P4TEMP[],P4TEMPL[] )
+
+        F45.X=P4SL[1]-P4TEMPL[1]
+        F45.Y=P4SL[2]-P4TEMPL[2]
+        F45.Z=P4SL[3]-P4TEMPL[3]
+
+        N4S[1]=N4[1]
+        N4S[2]=N4[2]
+        N4S[3]=N4[3]
+
+        KREUZ_PROD (N1S[],N4S[],V4S[] )
+        NORM_VEK (V4S[],3 )
+
+      ELSE
+
+        FOR I=1 TO  3
+          A[1,I]=P5S[I]-P4S[I]
+          A[2,I]=N1S[I]
+        ENDFOR
+        B[1]=C5TEMP-C4TEMP
+        B[2]=SKAL_PROD(N4TEMP[],N1S[],3)
+
+        SOLVE_2X3 (A[,],B[],N4[],N4S[] )
+
+        C4S=SKAL_PROD(N4S[],P4S[],3)
+
+        KREUZ_PROD (N1S[],N4S[],V4S[] )
+        NORM_VEK (V4S[],3 )
+        KREUZ_PROD (N1S[],N4TEMP[],V4TEMP[] )
+        NORM_VEK (V4TEMP[],3 )
+
+        FOR I=1 TO  3
+          A[1,I]=N1S[I]
+          A[2,I]=N4S[I]
+          A[3,I]=V4S[I]
+        ENDFOR
+        B[1]=C1S
+        B[2]=C4S
+        B[3]=SKAL_PROD(V4S[],P4S[],3)
+
+        LOES_3X3_LGS (A[,],Q4S[],B[] )
+
+        FOR I=1 TO  3
+          A[1,I]=N1S[I]
+          A[2,I]=N4TEMP[I]
+          A[3,I]=V4TEMP[I]
+        ENDFOR
+        B[1]=C1S
+        B[2]=C4TEMP
+        B[3]=SKAL_PROD(V4TEMP[],P4TEMP[],3)
+
+        LOES_3X3_LGS (A[,],Q4TEMP[],B[] )
+
+        FOR I=1 TO  3
+          SYS_1[1,I]=Q4TEMP[I]
+          SYS_2[1,I]=Q4S[I]
+
+          SYS_1[2,I]=Q4TEMP[I]+V4TEMP[I]
+          SYS_2[2,I]=Q4S[I]+V4S[I]
+
+          SYS_1[3,I]=Q4TEMP[I]+N1S[I]
+          SYS_2[3,I]=Q4S[I]+N1S[I]
+        ENDFOR
+
+
+        F45=SYS1_2_INV(SYS_1[,],SYS_2[,])
+
+        RPY_TO_MAT (O45[,],F45.A,F45.B,F45.C )
+      ENDIF
+    ENDIF
+
+    F12345=F45:F123
+
+    ; CORR P6:
+    ;---------
+    F6=$NULLFRAME
+
+    IF (CD6.MES_VAL<>-1) THEN
+
+      N6[1]=CD6.W_X
+      N6[2]=CD6.W_Y
+      N6[3]=CD6.W_Z
+
+      IF VEK_LAENGE(N6[],3)<0.001 THEN
+        REPEAT
+          MESS (5,1 ) ; error on search direction
+        UNTIL FALSE
+      ENDIF
+
+      NORM_VEK (N6[],3 )
+
+      F_P6=$NULLFRAME
+      F_P6.X=P6[1]
+      F_P6.Y=P6[2]
+      F_P6.Z=P6[3]
+
+      F_P6TEMP=F12345:F_P6
+
+      P6TEMP[1]=F_P6TEMP.X
+      P6TEMP[2]=F_P6TEMP.Y
+      P6TEMP[3]=F_P6TEMP.Z
+
+      F12345.X=0
+      F12345.Y=0
+      F12345.Z=0
+
+      F_N6=$NULLFRAME
+      F_N6.X=N6[1]
+      F_N6.Y=N6[2]
+      F_N6.Z=N6[3]
+
+      F_N6S=F12345:F_N6
+
+      N6S[1]=F_N6S.X
+      N6S[2]=F_N6S.Y
+      N6S[3]=F_N6S.Z
+
+      NENNER=SKAL_PROD(N6S[],V4S[],3)
+
+      C6TEMP=SKAL_PROD(N6S[],P6TEMP[],3)
+      C6S=SKAL_PROD(N6S[],P6S[],3)
+
+      F6.X=((C6S-C6TEMP)/NENNER)*V4S[1]
+      F6.Y=((C6S-C6TEMP)/NENNER)*V4S[2]
+      F6.Z=((C6S-C6TEMP)/NENNER)*V4S[3]
+    ENDIF
+
+    F123456=F6:F45:F123
+
+    ;------------------------------------------
+    ;Integration of limit control of correction
+    IF (SQRT((F123456.X*F123456.X)+(F123456.Y*F123456.Y)+(F123456.Z*F123456.Z)) > TCH_MaxCorrVector) THEN
+      MESS (20,2 ) ;CorrectionOutOfLimit (TCH_MaxCorrVector)
+    ENDIF
+    ;------------------------------------------
+
+    IF $ACT_BASE>=0 THEN
+      IF $ACT_BASE==0 THEN
+        BASE_CORR=F123456
+      ELSE
+        BASE_CORR=F123456
+      ENDIF
+    ELSE
+      IF $ACT_EX_AX>0 THEN
+        I=$ACT_EX_AX
+        BASE_CORR=F123456
+      ELSE
+        MESS (1,1 )
+      ENDIF
+    ENDIF
+  ENDIF
+
+END
+
+;------------------- Library - Functions: -------------------------
+
+
+DEF  SOLVE_2X3 (A[,],B[],N_OLD[],N[] )
+  ; Loese das 2x3-System A n = b ,
+  ; s.t. ||n|| = 1 und <n,n_old> = max{<n_a,n_old>, <n_b,n_old>}
+
+  REAL A[,],B[],N_OLD[],N[]
+  REAL D,WURZEL
+
+  REAL V1[3],V2[3],V_L[3],N_A[3],N_B[3],N1[3],N2[3],AA,AB,BB,LAMBDA1,LAMBDA2
+  INT I
+
+  FOR I=1 TO  3
+    V1[I]=A[1,I]
+    V2[I]=A[2,I]
+  ENDFOR
+
+  IF ((VEK_LAENGE(V1[],3)<B[1]-1) OR (VEK_LAENGE(V2[],3)<B[2]-1)) THEN
+    REPEAT
+      MESS (6,1 ) ; wrong correction datas
+    UNTIL FALSE
+  ENDIF
+
+  KREUZ_PROD (V1[],V2[],V_L[] )
+
+  NORM_VEK (V_L[],3 )
+
+  FOR I=1 TO  3
+    A[3,I]=V_L[I]
+  ENDFOR
+
+  B[3]=0
+  LOES_3X3_LGS (A[,],N_A[],B[] )
+
+  B[3]=100
+  LOES_3X3_LGS (A[,],N_B[],B[] )
+
+  AA=SKAL_PROD(N_A[],N_A[],3)
+  AB=SKAL_PROD(N_A[],N_B[],3)
+  BB=SKAL_PROD(N_B[],N_B[],3)
+
+  D=AB*AB-AA*BB+AA+BB-2*AB
+
+  IF D>0 THEN
+    WURZEL=SQRT(D)
+  ELSE
+    WURZEL=0
+  ENDIF
+
+  LAMBDA1=(BB-AB+WURZEL)/(AA+BB-2*AB)
+  LAMBDA2=(BB-AB-WURZEL)/(AA+BB-2*AB)
+
+
+  FOR I=1 TO  3
+    N1[I]=LAMBDA1*N_A[I]+(1-LAMBDA1)*N_B[I]
+    N2[I]=LAMBDA2*N_A[I]+(1-LAMBDA2)*N_B[I]
+  ENDFOR
+
+
+  IF SKAL_PROD(N_OLD[],N1[],3)>SKAL_PROD(N_OLD[],N2[],3) THEN
+    N[1]=N1[1]
+    N[2]=N1[2]
+    N[3]=N1[3]
+  ELSE
+    N[1]=N2[1]
+    N[2]=N2[2]
+    N[3]=N2[3]
+  ENDIF
+
+END
+
+
+
+DEF  PROJEC_PLANE (N[],P_PLANE[],P[],P_L[] )
+  ; Der Punkt P wird in die Ebene senkrecht projeziert, die den Normalen-
+  ; vektor N besitzt und den Punkt P_PLANE enthaelt.
+  ; Das Ergebnis liegt in P_L[]
+
+  REAL N[],P_PLANE[],P[],P_L[]
+
+  REAL A[3,3],D_P[3],ERG[3],SK_PR
+  INT I,J
+
+  SK_PR=SKAL_PROD(N[],N[],3)
+
+  FOR I=1 TO  3
+    FOR J=1 TO  3
+      A[I,J]=N[I]*N[J]/SK_PR
+    ENDFOR
+  ENDFOR
+
+  FOR I=1 TO  3
+    D_P[I]=P[I]-P_PLANE[I]
+  ENDFOR
+
+  MAT_MAL_VEK (A[,],D_P[],ERG[],3,3 )
+
+  FOR I=1 TO  3
+    P_L[I]=P[I]-ERG[I]
+  ENDFOR
+
+END
+
+
+
+DEFFCT  FRAME SYS1_2_INV(PT_IN_SYS1[,],PT_IN_SYS2[,])
+  ; Calculation of the frame which transforms the coordinate-system
+  ; SYS1 into the system SYS2
+
+  REAL PT_IN_SYS1[,],PT_IN_SYS2[,]
+
+  FRAME DEST_FRAME,SRC_FRAME,RESULT_FR
+  REAL DEST_PT[3,3],SRC_PT[3,3]
+  INT POINT,I
+
+  FOR POINT=1 TO  3
+    FOR I=1 TO  3
+      DEST_PT[POINT,I]=PT_IN_SYS2[POINT,I]
+      SRC_PT[POINT,I]=PT_IN_SYS1[POINT,I]
+    ENDFOR
+  ENDFOR
+
+  MAP_3_POINTS (DEST_FRAME,DEST_PT[,] )
+  MAP_3_POINTS (SRC_FRAME,SRC_PT[,] )
+
+  INV_FRAME (SRC_FRAME )
+
+  RESULT_FR=DEST_FRAME:SRC_FRAME
+
+  RETURN  (RESULT_FR)
+
+ENDFCT
+
+DEF  MAP_3_POINTS (F,POINTS[,] )
+  ; POINTS[1,.], POINTS[2,.], POINTS[3,.] are 3 Points, defining a Frame F
+
+  FRAME F
+  REAL POINTS[,]
+
+  REAL T[4,4],V1[3],V2[3],V3[3],P3_P1[3],Z[3],PROJEC[3,3]
+  REAL ANGLE_V1_V2,ALFA
+  INT I,J
+
+  FOR I=1 TO  3
+    V1[I]=POINTS[2,I]-POINTS[1,I]
+    P3_P1[I]=POINTS[3,I]-POINTS[1,I]
+  ENDFOR
+
+  NORM_VEK (V1[],3 )
+
+  EINHEITS_MAT (PROJEC[,],3 )
+  FOR I=1 TO  3
+    FOR J=1 TO  3
+      PROJEC[I,J]=PROJEC[I,J]-V1[I]*V1[J]
+    ENDFOR
+  ENDFOR
+
+  MAT_MAL_VEK (PROJEC[,],P3_P1[],V2[],3,3 )
+
+  NORM_VEK (V2[],3 )
+
+  KREUZ_PROD (V1[],V2[],V3[] )
+
+  FOR I=1 TO  3
+    T[I,1]=V1[I]
+    T[I,2]=V2[I]
+    T[I,3]=V3[I]
+  ENDFOR
+  MAT_TO_RPY (T[,],F.A,F.B,F.C )
+
+  F.X=POINTS[1,1]
+  F.Y=POINTS[1,2]
+  F.Z=POINTS[1,3]
+
+END
+
+
+
+
+;------------------- Mathematische Hilfsprozeduren: -------------------------
+
+
+
+DEFFCT  REAL SIGN(X :IN)
+  ; Bestimmung des Vorzeichens von x
+  REAL X
+
+  IF X<0 THEN
+    RETURN  (-1)
+  ELSE
+    RETURN  (1)
+  ENDIF
+
+ENDFCT
+
+
+DEFFCT  REAL ARCTAN2(Y :IN,X :IN)
+  ; Arcustangens mit 2 Argumenten und Check, ob x und y numerisch 0 sind
+
+  REAL X,Y
+
+  REAL ATAN_EPS
+
+  ATAN_EPS=0.00011
+
+  IF ((ABS(X)<ATAN_EPS) AND (ABS(Y)<ATAN_EPS)) THEN
+    RETURN  (0)
+  ELSE
+    RETURN  (ATAN2(Y,X))
+  ENDIF
+
+ENDFCT
+
+
+
+DEFFCT  REAL ASIN(X :IN) 
+  ; Berechnung des Arcussinus
+
+  REAL X
+
+  RETURN  (90-ACOS(X))
+
+ENDFCT
+
+
+
+DEF  EINHEITS_MAT (E[,],N :IN )
+  ; Aufstellen der N x N - Einheitsmatrix E
+
+  REAL E[,]
+  INT N
+
+  INT I,J
+
+  FOR I=1 TO  N
+    FOR J=1 TO  N
+      IF (I==J) THEN
+        E[I,J]=1
+      ELSE
+        E[I,J]=0
+      ENDIF
+    ENDFOR
+  ENDFOR
+
+END
+
+
+
+
+DEFFCT  REAL SKAL_PROD(V[],W[],N :IN)
+  ; Berechnung des Skalarprodukts der beiden N-dimensionalen Vektoren
+  ; V und W
+
+  REAL V[],W[]
+  INT N
+
+  REAL SK_PROD
+  INT I
+
+  SK_PROD=0
+  FOR I=1 TO  N
+    SK_PROD=SK_PROD+V[I]*W[I]
+  ENDFOR
+
+  RETURN  (SK_PROD)
+ENDFCT
+
+
+DEF  KREUZ_PROD (U[],V[],W[] )
+  ; Berechnung des Kreuzproduktes der 3-dim Vektoren U und V.
+  ; Das Ergebnis wird in W abgespeichert.
+
+  REAL U[],V[],W[]
+
+  W[1]=U[2]*V[3]-U[3]*V[2]
+  W[2]=U[3]*V[1]-U[1]*V[3]
+  W[3]=U[1]*V[2]-U[2]*V[1]
+
+END
+
+
+
+
+DEFFCT  REAL VEK_LAENGE(V[],N :IN)
+  ; Berechnung der euklidischen Laenge des N-dimensionalen Vektors V
+
+  REAL V[]
+  INT N
+
+  RETURN  (SQRT(SKAL_PROD(V[],V[],N)))
+ENDFCT
+
+
+
+
+DEF  NORM_VEK (V[],N :IN )
+  ; Der Vektor V wird durch seine Laenge dividiert, so dass er dann
+  ; Laenge 1 besitzt.
+
+  REAL V[]
+  INT N
+
+  REAL LAENGE
+  INT I
+
+  LAENGE=VEK_LAENGE(V[],N)
+
+  FOR I=1 TO  N
+    IF LAENGE==0 THEN
+      WHILE  LAENGE==0
+        MESS (19,2 )
+      ENDWHILE
+    ELSE
+      V[I]=V[I]/LAENGE
+    ENDIF
+  ENDFOR
+END
+
+
+
+
+DEF  VEK_COPY (DEST_VEK[],SRC_VEK[],N :IN )
+
+  REAL DEST_VEK[],SRC_VEK[]
+  INT N
+
+  INT I
+
+  FOR I=1 TO  N
+    DEST_VEK[I]=SRC_VEK[I]
+  ENDFOR
+
+END
+
+
+
+
+
+DEF  MAT_MAL_VEK (A[,],X[],B[],N :IN,M :IN )
+  ; b = A * x wird berechnet, wobei dim(A) = N x M
+
+  REAL A[,],X[],B[]
+  INT N,M
+
+  REAL SUM
+  INT I,J
+
+  FOR I=1 TO  N
+    SUM=0
+    FOR J=1 TO  M
+      SUM=SUM+A[I,J]*X[J]
+    ENDFOR
+    B[I]=SUM
+  ENDFOR
+
+END
+
+
+
+DEF  V_ORTH_W (VW[],W[],V[],N :IN )
+  ; Der Vektor VW wird zerlegt in einen Anteil parallel zu W und in einen
+  ; Anteil V, der orthogonal zu W steht.
+
+  REAL VW[],W[],V[]
+  INT N
+
+  REAL PROJ[3,3],LAMBDA ; Hier N = 3 !!!
+  INT I,J
+
+  EINHEITS_MAT (PROJ[,],N )
+  LAMBDA=1/SKAL_PROD(W[],W[],N)
+
+  FOR I=1 TO  N
+    FOR J=1 TO  N
+      PROJ[I,J]=PROJ[I,J]-W[I]*W[J]*LAMBDA
+    ENDFOR
+  ENDFOR
+
+  MAT_MAL_VEK (PROJ[,],VW[],V[],N,N )
+
+END
+
+
+
+
+
+DEF  LOES_3X3_LGS (A[,],X[],B[] )
+  ; Das lineare 3x3 Gleichungssystem  A x = b  wird mit der Cramer 'schen
+  ; Regel geloest.
+
+  REAL A[,],X[],B[]
+
+  REAL DET,DET_X,DET_Y,DET_Z
+
+  DET=A[1,1]*A[2,2]*A[3,3]+A[1,2]*A[2,3]*A[3,1]+A[1,3]*A[2,1]*A[3,2]
+  DET=DET-A[3,1]*A[2,2]*A[1,3]-A[3,2]*A[2,3]*A[1,1]-A[3,3]*A[2,1]*A[1,2]
+
+  DET_X=B[1]*A[2,2]*A[3,3]+A[1,2]*A[2,3]*B[3]+A[1,3]*B[2]*A[3,2]
+  DET_X=DET_X-B[3]*A[2,2]*A[1,3]-A[3,2]*A[2,3]*B[1]-A[3,3]*B[2]*A[1,2]
+
+  DET_Y=A[1,1]*B[2]*A[3,3]+B[1]*A[2,3]*A[3,1]+A[1,3]*A[2,1]*B[3]
+  DET_Y=DET_Y-A[3,1]*B[2]*A[1,3]-B[3]*A[2,3]*A[1,1]-A[3,3]*A[2,1]*B[1]
+
+  DET_Z=A[1,1]*A[2,2]*B[3]+A[1,2]*B[2]*A[3,1]+B[1]*A[2,1]*A[3,2]
+  DET_Z=DET_Z-A[3,1]*A[2,2]*B[1]-A[3,2]*B[2]*A[1,1]-B[3]*A[2,1]*A[1,2]
+
+  X[1]=DET_X/DET
+  X[2]=DET_Y/DET
+  X[3]=DET_Z/DET
+END
+
+
+
+
+
+
+DEF  RPY_TO_MAT (T[,],A :IN,B :IN,C :IN )
+  ; Umwandlung von RPY-Winkeln A, B, C in eine Trafo-Matrix T
+  ; T = Rot_z(A) * Rot_y(B) * Rot_x(C)
+
+  REAL T[,],A,B,C
+  REAL COS_A,SIN_A,COS_B,SIN_B,COS_C,SIN_C
+
+  COS_A=COS(A)
+  SIN_A=SIN(A)
+
+  COS_B=COS(B)
+  SIN_B=SIN(B)
+
+  COS_C=COS(C)
+  SIN_C=SIN(C)
+
+  T[1,1]=COS_A*COS_B
+  T[1,2]=-SIN_A*COS_C+COS_A*SIN_B*SIN_C
+  T[1,3]=SIN_A*SIN_C+COS_A*SIN_B*COS_C
+
+  T[2,1]=SIN_A*COS_B
+  T[2,2]=COS_A*COS_C+SIN_A*SIN_B*SIN_C
+  T[2,3]=-COS_A*SIN_C+SIN_A*SIN_B*COS_C
+
+  T[3,1]=-SIN_B
+  T[3,2]=COS_B*SIN_C
+  T[3,3]=COS_B*COS_C
+
+END
+
+
+
+DEF  MAT_TO_RPY (T[,],A,B,C )
+  ; Umwandlung einer Trafo-Matrix T in die RPY-Winkel A, B, C
+  ; T = Rot_z(A) * Rot_y(B) * Rot_x(C)
+
+  REAL T[,],A,B,C
+
+  REAL SIN_A,COS_A,SIN_B,ABS_COS_B,SIN_C,COS_C
+
+  A=ARCTAN2(T[2,1],T[1,1])
+  SIN_A=SIN(A)
+  COS_A=COS(A)
+
+  SIN_B=-T[3,1]
+  ABS_COS_B=COS_A*T[1,1]+SIN_A*T[2,1]
+  B=ARCTAN2(SIN_B,ABS_COS_B) ;       Hier: -90 <= B <= +90 !!
+
+  SIN_C=SIN_A*T[1,3]-COS_A*T[2,3]
+  COS_C=-SIN_A*T[1,2]+COS_A*T[2,2]
+  C=ARCTAN2(SIN_C,COS_C)
+
+END
+
+
+
+
+DEF  MK_MAT_ORTH (T[,] )
+  ; Die 3x3-Matrix T ist eine fast orthogonale Matrix.
+  ; Es wird eine Matrix orthogonale Matrix gesucht, die T gut annaehert.
+  ; Diese wird wieder in T eingetragen.
+
+  REAL T[,]
+
+  REAL T1[3],T2[3],T2_ORTH[3],T3_ORTH[3]
+  INT I
+
+  FOR I=1 TO  3
+    T1[I]=T[I,1]
+    T2[I]=T[I,2]
+  ENDFOR
+
+  V_ORTH_W (T2[],T1[],T2_ORTH[],3 )
+
+  KREUZ_PROD (T1[],T2_ORTH[],T3_ORTH[] )
+
+  NORM_VEK (T1[],3 )
+  NORM_VEK (T2_ORTH[],3 )
+  NORM_VEK (T3_ORTH[],3 )
+
+  FOR I=1 TO  3
+    T[I,1]=T1[I]
+    T[I,2]=T2_ORTH[I]
+    T[I,3]=T3_ORTH[I]
+  ENDFOR
+
+END
+
+
+DEFFCT  REAL DIST_FRAME(P1,P2)
+  ; Berechnung des Abstandes zwischen 2 Positionen
+
+  FRAME P1,P2
+
+  REAL DIST_VEC[3]
+
+  DIST_VEC[1]=P2.X-P1.X
+  DIST_VEC[2]=P2.Y-P1.Y
+  DIST_VEC[3]=P2.Z-P1.Z
+
+  RETURN  (VEK_LAENGE(DIST_VEC[],3))
+
+ENDFCT
+
+
+
+DEFFCT  REAL WINKEL_VEK(V[],W[],N :IN)
+  ; Berechnung des Winkel zwischen den N-dim. Vektoren V und W
+
+  REAL V[],W[]
+  INT N
+
+  REAL LEN_V,LEN_W
+
+  LEN_V=VEK_LAENGE(V[],N)
+  LEN_W=VEK_LAENGE(W[],N)
+
+  RETURN  (ACOS(SKAL_PROD(V[],W[],N)/(LEN_V*LEN_W)))
+
+ENDFCT
+
+
+
+
+DEF  INV_ORI_MAT (O[,] )
+  ; Invertieren der orthogonalen 3x3-Orientierungsmatrix durch Transponieren
+
+  REAL O[,]
+
+  REAL TAUSCH
+  INT I,J
+
+  FOR I=1 TO  3
+    FOR J=I+1 TO  3
+      TAUSCH=O[I,J]
+      O[I,J]=O[J,I]
+      O[J,I]=TAUSCH
+    ENDFOR
+  ENDFOR
+
+END
+
+DEF  INV_FRAME (F )
+
+  FRAME F
+
+  REAL O[3,3],MINUS_P[3],INV_P[3]
+
+  ; Orientierung invertieren:
+  RPY_TO_MAT (O[,],F.A,F.B,F.C )
+  INV_ORI_MAT (O[,] )
+  MAT_TO_RPY (O[,],F.A,F.B,F.C )
+
+  ; Ort invertieren:
+  MINUS_P[1]=-F.X
+  MINUS_P[2]=-F.Y
+  MINUS_P[3]=-F.Z
+
+  MAT_MAL_VEK (O[,],MINUS_P[],INV_P[],3,3 )
+
+  F.X=INV_P[1]
+  F.Y=INV_P[2]
+  F.Z=INV_P[3]
+
+END
+
+DEF  MESS (MESS_NR,OPT )
+  ;**********************
+  ;Error message
+  ;**********************
+  INT MESS_NR,OPT
+  DECL MSG_T EMPTY_MSG
+  EMPTY_MSG={MSG_T: VALID FALSE,RELEASE FALSE,TYP #QUIT,MODUL[] "TPTOUCHSENSE",KEY[] " ",PARAM_TYP #KEY,PARAM[] " ",DLG_FORMAT[] " ",ANSWER 0}
+
+  $MSG_T=EMPTY_MSG
+  SWITCH  MESS_NR
+  CASE 1
+    $MSG_T.KEY[]="BaseCoorSystemNoMacroControled"
+  CASE 2
+    $MSG_T.KEY[]="MeasureOutOfTolerance"
+  CASE 3
+    $MSG_T.KEY[]="PartNoFound"
+  CASE 4
+    $MSG_T.KEY[]="ValueWrongCorrectionNoPossible"
+  CASE 5
+    $MSG_T.KEY[]="SearchDirectionError"
+  CASE 6
+    $MSG_T.KEY[]="CorrectionDataAreWrong"
+  CASE 7
+    $MSG_T.KEY[]="CorrectionNoExecutable"
+  CASE 8
+    $MSG_T.KEY[]="StructureElementWithIndexZero"
+  CASE 9
+    $MSG_T.KEY[]="SearchDirectionNoDefined"
+  CASE 10
+    $MSG_T.KEY[]="SearchPointReached"
+  CASE 11
+    $MSG_T.KEY[]="ValueOfNew_RefIsTrue"
+  CASE 12
+    $MSG_T.KEY[]="ValueOfTouch_OnIsFalse"
+  CASE 13
+    $MSG_T.KEY[]="MeasureNoValidBecauseT1IsOn"
+  CASE 14
+    $MSG_T.KEY[]="SearchDirectionError2"
+  CASE 15
+    $MSG_T.KEY[]="WireHasContactToSheetMetal"
+  CASE 16
+    $MSG_T.KEY[]="CancelOrResetProgram"
+  CASE 17
+    $MSG_T.KEY[]="TouchOptionNotAvailable"
+  CASE 18
+    $MSG_T.KEY[]="VectorProgrammedToShort"
+  CASE 19
+    $MSG_T.KEY[]="WrongParameterOfCorrCommand"
+  CASE 20 
+    $MSG_T.KEY[]="CorrectionOutOfLimit"
+
+  DEFAULT
+
+  ENDSWITCH
+
+  SWITCH  OPT
+
+  CASE 1
+    $MSG_T.VALID=TRUE
+    WHILE  $MSG_T.VALID
+      WAIT SEC 0.05
+    ENDWHILE
+    WAIT SEC 0.2
+
+  CASE 2
+    $MSG_T.VALID=TRUE
+    HALT
+  DEFAULT
+  ENDSWITCH
+  $MSG_T=EMPTY_MSG
+
+END
