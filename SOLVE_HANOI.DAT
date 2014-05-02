@@ -1,14 +1,20 @@
-&ACCESS RVO
-&REL 24
+&ACCESS RVP
+&REL 40
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEFDAT  SOLVE_HANOI
 DECL INT Dummy=1
-DECL INT I=7
+DECL INT I=2
 DECL INT HANOI_DISK_COUNT=3
 ; Calculate REQUIRED_MOVES = 2^HANOI_DISK_COUNT - 1 (does KRL have exponents?)
 DECL INT REQUIRED_MOVES=7
 DECL INT MOVE_ARRAY[7,2]
+
+; Remember if we come from HOME
+DECL BOOL FirstMove=FALSE
+
+; Tool Definitions
+DECL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b 0.0,c 0.0}
 
 ; Following are placeholders 
 ; Info about the disk in

@@ -1,9 +1,10 @@
-&ACCESS RVO
-&REL 24
+&ACCESS RVP
+&REL 40
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
 ;------- Declaration section --------
+EXT BAS(BAS_COMMAND:IN, REAL:IN)
 DECL INT FROM_TOWER, USING_TOWER, TO_TOWER, NEXT_INDEX
 DECL AXIS HOME
 
@@ -11,14 +12,10 @@ DECL AXIS HOME
 ; Set the Max velocities and accelerations
 ; set to 10 now for initial testing and setup
 ; once positions and logic are confirmed correct 100 should be safe
-FOR I=1 TO 6
-$VEL_AXIS[I]=10
-$ACC_AXIS[I]=10
-ENDFOR
-
-; TODO: Modify $TOOL so that the center point is where we want tower center to be when picking up disks
-$TOOL = $NULLFRAME
-$BASE = $NULLFRAME
+BAS(#INITMOV, 0)  ; Init all Motion Parameters
+BAS(#ACC_PTP, 10) ; Acceleration in %
+BAS(#VEL_PTP, 10) ; PTP-Speed in %
+BAS(#VEL_CP, 0.3) ; LIN-Speed in m/s
 
 HOME={AXIS: A1 0, A2 -90, A3 90, A4 0, A5 0, A6 0}
 
@@ -29,6 +26,7 @@ NEXT_INDEX = 1
 
 ;----------- Main section ----------
 PTP HOME ; BCO run - setup for movements
+FirstMove = TRUE
 
 Dummy = MOVETOWER(HANOI_DISK_COUNT, FROM_TOWER, USING_TOWER, TO_TOWER, MOVE_ARRAY[,], NEXT_INDEX)
 
@@ -38,7 +36,9 @@ HALT
 ENDIF 
 
 ;Execute Movements
+$TOOL = DiskTool
 EXECUTE_SOLUTION(MOVE_ARRAY[,])
+$TOOL = $NULLFRAME
 
 PTP HOME ; Back safe and sound.
 
@@ -62,7 +62,7 @@ DISK_COUNTS[2] = 0
 DISK_COUNTS[3] = 0
 
 ; Create the position vectors we'll use throughout executing the solution
-TABLE = {POS: X 0, Y 0, Z 0, A 0, B 0, C 0}
+TABLE = {POS: X 0, Y 0, Z 0, A 0, B 90, C 0}
 TABLE.X = TABLE_X
 TABLE.Y = TABLE_Y
 TABLE.Z = TABLE_Z
@@ -125,7 +125,12 @@ CURR_TO_BASE = TOWER_BASES[CURR_TO]
 
 ; TODO: Execute 6 steps to move disk and prep for next cycle
 ; Move to the pickup zone and align with next disk to pickup
-LIN CURR_FROM_BASE:PICK_UP_OFFSET
+IF FirstMove THEN
+  PTP CURR_FROM_BASE:PICK_UP_OFFSET
+  FirstMove = FALSE
+ELSE
+  LIN CURR_FROM_BASE:PICK_UP_OFFSET
+ENDIF
 
 ;Move to tower center offset up by currdisk offset
 LIN CURR_FROM_BASE:FROM_DISK_Z_OFFSET
