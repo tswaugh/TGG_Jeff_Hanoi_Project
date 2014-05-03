@@ -1,5 +1,5 @@
 &ACCESS RVP
-&REL 57
+&REL 60
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEFDAT  SOLVE_HANOI
@@ -14,7 +14,7 @@ DECL INT DISK_COUNTS[3]
 DECL BOOL FirstMove=FALSE
 
 ; Tool Definitions
-DECL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b 90.0,c 0.0}
+DECL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -90.0,c 0.0}
 
 ; Following are placeholders 
 ; Info about the disk in
@@ -30,7 +30,7 @@ DECL REAL TRANSIT_ZONE_Y_OFFSET=500.0
 ; Table coordinates for front left corner (rel to world coords)
 DECL REAL TABLE_X=2000.0
 DECL REAL TABLE_Y=1006.0
-DECL REAL TABLE_Z=1678.0
+DECL REAL TABLE_Z=1078.0
 
 ; Towers from left to right
 ; Coordinate info for starting tower base relative to the table front left corner

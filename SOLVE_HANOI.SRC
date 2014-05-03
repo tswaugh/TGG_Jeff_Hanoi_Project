@@ -1,5 +1,5 @@
 &ACCESS RVP
-&REL 57
+&REL 60
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
@@ -11,9 +11,9 @@ DECL AXIS HOME
 ;---------- Initialization ----------
 ; Set the Max velocities and accelerations
 BAS(#INITMOV, 0)   ; Init all Motion Parameters
-BAS(#ACC_PTP, 100) ; PTP-Acceleration in %
-BAS(#VEL_PTP, 100) ; PTP-Speed in %
-BAS(#ACC_CP, 75)   ; LIN-Acceleration in %
+BAS(#ACC_PTP, 25)  ; PTP-Acceleration in %
+BAS(#VEL_PTP, 80)  ; PTP-Speed in %
+BAS(#ACC_CP, 25)   ; LIN-Acceleration in %
 BAS(#VEL_CP, 1)    ; LIN-Speed in m/s
 
 ; Set Axis 5 to -0.1 to prevent singularity problems
