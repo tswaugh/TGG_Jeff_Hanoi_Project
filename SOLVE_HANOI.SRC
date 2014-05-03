@@ -123,11 +123,11 @@ TO_DISK_Z_OFFSET.Z = TO_NEXT_DISK_Z
 
 ; Check if from tower has  >= 1 disks on it and that to tower has positive number of disks (SANITY CHECK)
 IF DISK_COUNTS[CURR_FROM] < 1 THEN
-HALT
+  HALT
 ENDIF
 
 IF DISK_COUNTS[CURR_TO]  < 0 THEN
-HALT
+  HALT
 ENDIF
 
 CURR_FROM_BASE = TOWER_BASES[CURR_FROM]
@@ -165,7 +165,7 @@ ENDFOR
 END ;Execute solution end
 
 DEFFCT INT MOVETOWER(DNUM:IN, FROM_TOWER:IN, USING_TOWER:IN, TO_TOWER:IN, MOVE_MATRIX[,]:OUT, NEXT_INDEX:OUT)
-; Not entirely sure if we need these declarations
+; Declare the inputs. 
 DECL INT DNUM , FROM_TOWER , USING_TOWER , TO_TOWER , NEXT_INDEX
 ; Define MOVE_MATRIX again. It must be done.
 DECL INT MOVE_MATRIX[,]
