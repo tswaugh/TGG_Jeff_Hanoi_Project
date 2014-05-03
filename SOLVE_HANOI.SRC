@@ -1,5 +1,5 @@
 &ACCESS RVP
-&REL 52
+&REL 54
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
@@ -13,7 +13,7 @@ DECL AXIS HOME
 BAS(#INITMOV, 0)   ; Init all Motion Parameters
 BAS(#ACC_PTP, 100) ; PTP-Acceleration in %
 BAS(#VEL_PTP, 100) ; PTP-Speed in %
-BAS(#ACC_CP, 50)   ; LIN-Acceleration in %
+BAS(#ACC_CP, 75)   ; LIN-Acceleration in %
 BAS(#VEL_CP, 1)    ; LIN-Speed in m/s
 
 ; Set Axis 5 to -0.1 to prevent singularity problems
@@ -35,7 +35,6 @@ DISK_COUNTS[FROM_TOWER] = HANOI_DISK_COUNT
 ;----------- Main section ----------
 ;Do this loop forever
 WHILE TRUE
-FOR CYCLE_COUNT = 1 TO 3
 PTP HOME ; BCO run - setup for movements
 FirstMove = TRUE
 
@@ -43,7 +42,7 @@ MOVETOWER(HANOI_DISK_COUNT, FROM_TOWER, USING_TOWER, TO_TOWER, MOVE_ARRAY[,], NE
 
 ; Sanity check
 IF NEXT_INDEX <> REQUIRED_MOVES + 1 THEN
-HALT
+  HALT
 ENDIF 
 
 ;Execute Movements
@@ -51,17 +50,12 @@ $TOOL = DiskTool
 EXECUTE_SOLUTION(MOVE_ARRAY[,])
 $TOOL = $NULLFRAME
 
-PTP HOME ; Back safe and sound.
-
 ; Shuffle the to, from, and using towers
 LAST_FROM = FROM_TOWER
 FROM_TOWER = TO_TOWER
 TO_TOWER = USING_TOWER
 USING_TOWER = LAST_FROM
 NEXT_INDEX = 1
-
-ENDFOR
-
 ENDWHILE ;Infinite demo loop
 
 PTP HOME
@@ -141,7 +135,6 @@ ENDIF
 CURR_FROM_BASE = TOWER_BASES[CURR_FROM]
 CURR_TO_BASE = TOWER_BASES[CURR_TO]
 
-; TODO: Execute 6 steps to move disk and prep for next cycle
 ; Move to the pickup zone and align with next disk to pickup
 IF FirstMove THEN
   PTP CURR_FROM_BASE:PICK_UP_OFFSET
@@ -165,7 +158,7 @@ LIN CURR_TO_BASE:TO_DISK_Z_OFFSET
 ; Retract into pickup zone
 LIN CURR_TO_BASE:PICK_UP_OFFSET
 
-; TODO: Change disk counts for from and to towers
+; Change disk counts for from and to towers
 DISK_COUNTS[CURR_TO] = DISK_COUNTS[CURR_TO] + 1
 DISK_COUNTS[CURR_FROM] = DISK_COUNTS[CURR_FROM] - 1
 ENDFOR
@@ -181,7 +174,7 @@ DECL INT MOVE_MATRIX[,]
 ; Recursion base case
 IF DNUM == 0 THEN
   RETURN
-ELSE
+ENDIF
 
 ; Temporarily move everything on top of the FROM_TOWER except the last disk to the USING_TOWER
 MOVETOWER(DNUM - 1 , FROM_TOWER , TO_TOWER , USING_TOWER , MOVE_MATRIX[,] , NEXT_INDEX)
@@ -193,6 +186,4 @@ NEXT_INDEX = NEXT_INDEX + 1
 
 ; Move the temporary stack from step 1 to the TO_TOWER
 MOVETOWER(DNUM - 1 , USING_TOWER , FROM_TOWER , TO_TOWER , MOVE_MATRIX[,] , NEXT_INDEX)
-
-ENDIF
 END ;Movetower end
