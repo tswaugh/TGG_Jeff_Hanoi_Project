@@ -1,5 +1,5 @@
 &ACCESS RVP
-&REL 54
+&REL 57
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
@@ -132,31 +132,37 @@ IF DISK_COUNTS[CURR_TO]  < 0 THEN
   HALT
 ENDIF
 
-CURR_FROM_BASE = TOWER_BASES[CURR_FROM]
-CURR_TO_BASE = TOWER_BASES[CURR_TO]
+; Move relative to the "from" tower
+$BASE = TOWER_BASES[CURR_FROM]
 
 ; Move to the pickup zone and align with next disk to pickup
 IF FirstMove THEN
-  PTP CURR_FROM_BASE:PICK_UP_OFFSET
+  PTP PICK_UP_OFFSET
   FirstMove = FALSE
 ELSE
-  LIN CURR_FROM_BASE:PICK_UP_OFFSET
+  LIN PICK_UP_OFFSET
 ENDIF
 
-;Move to tower center offset up by currdisk offset
-LIN CURR_FROM_BASE:FROM_DISK_Z_OFFSET
+; Move to tower center offset up by currdisk offset
+LIN FROM_DISK_Z_OFFSET
 
 ; Move up to transit zone
-LIN CURR_FROM_BASE:TRANSIT_OFFSET
+LIN TRANSIT_OFFSET
+
+; Move relative to the "to" tower
+$BASE = TOWER_BASES[CURR_TO]
 
 ; Align with to tower in transit zone
-LIN CURR_TO_BASE:TRANSIT_OFFSET
+LIN TRANSIT_OFFSET
 
 ; Lower to tower base + disk offset
-LIN CURR_TO_BASE:TO_DISK_Z_OFFSET
+LIN TO_DISK_Z_OFFSET
 
 ; Retract into pickup zone
-LIN CURR_TO_BASE:PICK_UP_OFFSET
+LIN PICK_UP_OFFSET
+
+; Reset relative movement
+$BASE = $NULLFRAME
 
 ; Change disk counts for from and to towers
 DISK_COUNTS[CURR_TO] = DISK_COUNTS[CURR_TO] + 1
