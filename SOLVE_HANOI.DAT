@@ -14,7 +14,7 @@ DECL INT DISK_COUNTS[3]
 DECL BOOL FirstMove=FALSE
 
 ; Tool Definitions
-DECL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b 0.0,c 0.0}
+DECL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b 90.0,c 0.0}
 
 ; Following are placeholders 
 ; Info about the disk in
@@ -22,7 +22,7 @@ DECL REAL DISK_THICKNESS=38.0999985
 DECL REAL DISK_PICKUP_OFFSET=-19.1000004
 
 ; Pick-up zone X offset
-DECL REAL PICK_UP_X_OFFSET=-500.0
+DECL REAL PICK_UP_X_OFFSET=-750.0
 
 ; Transit zone Y offset (currently 16" + 100mm)
 DECL REAL TRANSIT_ZONE_Y_OFFSET=500.0
