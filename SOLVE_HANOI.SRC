@@ -1,5 +1,5 @@
-&ACCESS RVO
-&REL 47
+&ACCESS RVP
+&REL 52
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
@@ -14,16 +14,23 @@ BAS(#INITMOV, 0)   ; Init all Motion Parameters
 BAS(#ACC_PTP, 100) ; PTP-Acceleration in %
 BAS(#VEL_PTP, 100) ; PTP-Speed in %
 BAS(#ACC_CP, 50)   ; LIN-Acceleration in %
-BAS(#VEL_CP, 1.5)  ; LIN-Speed in m/s
+BAS(#VEL_CP, 1)    ; LIN-Speed in m/s
 
 ; Set Axis 5 to -0.1 to prevent singularity problems
 ; Not the cleanest solution, but works for now
 HOME={AXIS: A1 0, A2 -90, A3 90, A4 0, A5 -0.1, A6 0}
 
+; Preset Starting Towers
 FROM_TOWER = 1
 USING_TOWER = 2
 TO_TOWER = 3
 NEXT_INDEX = 1
+
+; Set Disk Counters
+DISK_COUNTS[1] = 0
+DISK_COUNTS[2] = 0
+DISK_COUNTS[3] = 0
+DISK_COUNTS[FROM_TOWER] = HANOI_DISK_COUNT
 
 ;----------- Main section ----------
 ;Do this loop forever
@@ -49,7 +56,7 @@ PTP HOME ; Back safe and sound.
 ; Shuffle the to, from, and using towers
 LAST_FROM = FROM_TOWER
 FROM_TOWER = TO_TOWER
-TO_TOWER = FROM_TOWER
+TO_TOWER = USING_TOWER
 USING_TOWER = LAST_FROM
 NEXT_INDEX = 1
 
@@ -66,16 +73,11 @@ END ;Main program END
 DEF EXECUTE_SOLUTION(MOVE_MATRIX[,])
 
 DECL INT MOVE_MATRIX[,]
-DECL INT DISK_COUNTS[3]
 DECL INT CURR_FROM, CURR_TO
 DECL REAL FROM_NEXT_DISK_Z, TO_NEXT_DISK_Z
 
 DECL POS TOWER_BASES[3]
 DECL POS TABLE, TOWER_ONE_BASE_REL, TOWER_TWO_BASE_REL, TOWER_THREE_BASE_REL, TRANSIT_OFFSET, PICK_UP_OFFSET, FROM_DISK_Z_OFFSET, TO_DISK_Z_OFFSET
-
-DISK_COUNTS[1] = HANOI_DISK_COUNT
-DISK_COUNTS[2] = 0
-DISK_COUNTS[3] = 0
 
 ; Create the position vectors we'll use throughout executing the solution
 TABLE = {POS: X 0, Y 0, Z 0, A 0, B 90, C 0}
