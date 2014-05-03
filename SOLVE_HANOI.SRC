@@ -5,7 +5,7 @@
 DEF SOLVE_HANOI()
 ;------- Declaration section --------
 EXT BAS(BAS_COMMAND:IN, REAL:IN)
-DECL INT FROM_TOWER, USING_TOWER, TO_TOWER, NEXT_INDEX, LAST_FROM
+DECL INT FROM_TOWER, USING_TOWER, TO_TOWER, NEXT_INDEX, LAST_FROM, CYCLE_COUNT
 DECL AXIS HOME
 
 ;---------- Initialization ----------
@@ -25,6 +25,8 @@ TO_TOWER = 3
 NEXT_INDEX = 1
 
 ;----------- Main section ----------
+;Do this loop forever
+WHILE TRUE
 FOR CYCLE_COUNT = 1 TO 3
 PTP HOME ; BCO run - setup for movements
 FirstMove = TRUE
@@ -50,6 +52,8 @@ TO_TOWER = FROM_TOWER
 USING_TOWER = LAST_FROM
 
 ENDFOR
+
+ENDWHILE ;Infinite demo loop
 
 PTP HOME
 END ;Main program END
