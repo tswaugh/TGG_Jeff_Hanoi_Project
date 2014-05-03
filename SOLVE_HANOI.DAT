@@ -1,17 +1,17 @@
-&ACCESS RVP
-&REL 40
+&ACCESS RVO
+&REL 45
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEFDAT  SOLVE_HANOI
 DECL INT Dummy=1
-DECL INT I=2
+DECL INT I=8
 DECL INT HANOI_DISK_COUNT=3
 ; Calculate REQUIRED_MOVES = 2^HANOI_DISK_COUNT - 1 (does KRL have exponents?)
 DECL INT REQUIRED_MOVES=7
 DECL INT MOVE_ARRAY[7,2]
 
 ; Remember if we come from HOME
-DECL BOOL FirstMove=FALSE
+DECL BOOL FirstMove=TRUE
 
 ; Tool Definitions
 DECL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b 0.0,c 0.0}
@@ -22,7 +22,7 @@ DECL REAL DISK_THICKNESS=38.0999985
 DECL REAL DISK_PICKUP_OFFSET=-19.1000004
 
 ; Pick-up zone X offset
-DECL REAL PICK_UP_X_OFFSET=-1000.0
+DECL REAL PICK_UP_X_OFFSET=-500.0
 
 ; Transit zone Y offset (currently 16" + 100mm)
 DECL REAL TRANSIT_ZONE_Y_OFFSET=500.0
@@ -30,7 +30,7 @@ DECL REAL TRANSIT_ZONE_Y_OFFSET=500.0
 ; Table coordinates for front left corner (rel to world coords)
 DECL REAL TABLE_X=2000.0
 DECL REAL TABLE_Y=1006.0
-DECL REAL TABLE_Z=914.400024
+DECL REAL TABLE_Z=1678.0
 
 ; Towers from left to right
 ; Coordinate info for starting tower base relative to the table front left corner

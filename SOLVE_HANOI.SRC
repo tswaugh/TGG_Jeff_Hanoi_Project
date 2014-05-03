@@ -1,5 +1,5 @@
-&ACCESS RVP
-&REL 40
+&ACCESS RVO
+&REL 45
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
@@ -10,14 +10,15 @@ DECL AXIS HOME
 
 ;---------- Initialization ----------
 ; Set the Max velocities and accelerations
-; set to 10 now for initial testing and setup
-; once positions and logic are confirmed correct 100 should be safe
-BAS(#INITMOV, 0)  ; Init all Motion Parameters
-BAS(#ACC_PTP, 10) ; Acceleration in %
-BAS(#VEL_PTP, 10) ; PTP-Speed in %
-BAS(#VEL_CP, 0.3) ; LIN-Speed in m/s
+BAS(#INITMOV, 0)   ; Init all Motion Parameters
+BAS(#ACC_PTP, 100) ; PTP-Acceleration in %
+BAS(#VEL_PTP, 100) ; PTP-Speed in %
+BAS(#ACC_CP, 50)   ; LIN-Acceleration in %
+BAS(#VEL_CP, 1.5)  ; LIN-Speed in m/s
 
-HOME={AXIS: A1 0, A2 -90, A3 90, A4 0, A5 0, A6 0}
+; Set Axis 5 to -0.1 to prevent singularity problems
+; Not the cleanest solution, but works for now
+HOME={AXIS: A1 0, A2 -90, A3 90, A4 0, A5 -0.1, A6 0}
 
 FROM_TOWER = 1
 USING_TOWER = 2
@@ -50,6 +51,7 @@ LAST_FROM = FROM_TOWER
 FROM_TOWER = TO_TOWER
 TO_TOWER = FROM_TOWER
 USING_TOWER = LAST_FROM
+NEXT_INDEX = 1
 
 ENDFOR
 
