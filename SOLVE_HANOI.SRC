@@ -11,10 +11,10 @@ DECL AXIS HOME
 ;---------- Initialization ----------
 ; Set the Max velocities and accelerations
 BAS(#INITMOV, 0)   ; Init all Motion Parameters
-BAS(#ACC_PTP, 25)  ; PTP-Acceleration in %
-BAS(#VEL_PTP, 80)  ; PTP-Speed in %
-BAS(#ACC_CP, 25)   ; LIN-Acceleration in %
-BAS(#VEL_CP, 1)    ; LIN-Speed in m/s
+BAS(#ACC_PTP, 100) ; PTP-Acceleration in %
+BAS(#VEL_PTP, 100) ; PTP-Speed in %
+BAS(#ACC_CP, 100)  ; LIN-Acceleration in %
+BAS(#VEL_CP, 2)    ; LIN-Speed in m/s
 
 ; Set Axis 5 to -0.1 to prevent singularity problems
 ; Not the cleanest solution, but works for now
@@ -60,7 +60,6 @@ ENDWHILE ;Infinite demo loop
 
 PTP HOME
 END ;Main program END
-
 
 ; ------------EXECUTE_SOLUTION()------------
 ; EXECUTE_SOLUTION will execute the disk movements in MOVE_MATRIX
