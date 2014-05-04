@@ -143,26 +143,32 @@ IF FirstMove THEN
   PTP FROM_PICK_UP_OFFSET
   FirstMove = FALSE
 ELSE
-  LIN FROM_PICK_UP_OFFSET
+  $APO.CDIS = 50
+  LIN FROM_PICK_UP_OFFSET C_DIS
 ENDIF
 
 ; Move to tower center offset up by currdisk offset
-LIN FROM_DISK_Z_OFFSET
+$APO.CDIS = 1
+LIN FROM_DISK_Z_OFFSET C_DIS
 
 ; Move up to transit zone
-LIN TRANSIT_OFFSET
+$APO.CDIS = 5
+LIN TRANSIT_OFFSET C_DIS
 
 ; Move relative to the "to" tower
 $BASE = TOWER_BASES[CURR_TO]
 
 ; Align with to tower in transit zone
-LIN TRANSIT_OFFSET
+$APO.CDIS = 5
+LIN TRANSIT_OFFSET C_DIS
 
 ; Lower to tower base + disk offset
-LIN TO_DISK_Z_OFFSET
+$APO.CDIS = 1
+LIN TO_DISK_Z_OFFSET C_DIS
 
 ; Retract into pickup zone
-LIN TO_PICK_UP_OFFSET
+$APO.CDIS = 50
+LIN TO_PICK_UP_OFFSET C_DIS
 
 ; Reset relative movement
 $BASE = $NULLFRAME
