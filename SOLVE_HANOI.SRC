@@ -1,12 +1,11 @@
 &ACCESS RVP
-&REL 61
+&REL 66
 &PARAM TEMPLATE = C:\KRC\Roboter\Template\ExpertVorgabe
 &PARAM EDITMASK = *
 DEF SOLVE_HANOI()
 ;------- Declaration section --------
 EXT BAS(BAS_COMMAND:IN, REAL:IN)
 DECL INT FROM_TOWER, USING_TOWER, TO_TOWER, NEXT_INDEX, LAST_FROM, CYCLE_COUNT
-DECL AXIS HOME
 
 ;---------- Initialization ----------
 ; Set the Max velocities and accelerations
@@ -15,10 +14,6 @@ BAS(#ACC_PTP, 100) ; PTP-Acceleration in %
 BAS(#VEL_PTP, 100) ; PTP-Speed in %
 BAS(#ACC_CP, 100)  ; LIN-Acceleration in %
 BAS(#VEL_CP, 2)    ; LIN-Speed in m/s
-
-; Set Axis 5 to -0.1 to prevent singularity problems
-; Not the cleanest solution, but works for now
-HOME={AXIS: A1 0, A2 -90, A3 90, A4 0, A5 -0.1, A6 0}
 
 ; Preset Starting Towers
 FROM_TOWER = 1
@@ -35,7 +30,7 @@ DISK_COUNTS[FROM_TOWER] = HANOI_DISK_COUNT
 ;----------- Main section ----------
 ;Do this loop forever
 WHILE TRUE
-PTP HOME ; BCO run - setup for movements
+PTP XHOME ; BCO run - setup for movements
 FirstMove = TRUE
 
 MOVETOWER(HANOI_DISK_COUNT, FROM_TOWER, USING_TOWER, TO_TOWER, MOVE_ARRAY[,], NEXT_INDEX)
@@ -58,7 +53,7 @@ USING_TOWER = LAST_FROM
 NEXT_INDEX = 1
 ENDWHILE ;Infinite demo loop
 
-PTP HOME
+PTP XHOME
 END ;Main program END
 
 ; ------------EXECUTE_SOLUTION()------------
@@ -95,7 +90,7 @@ TOWER_THREE_BASE_REL.Y = TOWER_THREE_Y
 TOWER_THREE_BASE_REL.Z = TOWER_THREE_Z
 
 ; Pickup zone relative vector
-FROM_PICK_UP_OFFSET = {POS: X 0, Y 0, Z 0, A 0, B 0, C 0}
+FROM_PICK_UP_OFFSET = {POS: X 0, Y 0, Z 0, A 0, B 0, C 0, S 6}
 FROM_PICK_UP_OFFSET.X = PICK_UP_X_OFFSET
 TO_PICK_UP_OFFSET = {POS: X 0, Y 0, Z 0, A 0, B 0, C 0}
 TO_PICK_UP_OFFSET.X = PICK_UP_X_OFFSET
