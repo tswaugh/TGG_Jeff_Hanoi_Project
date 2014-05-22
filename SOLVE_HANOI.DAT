@@ -29,8 +29,8 @@ DECL GLOBAL REAL TRANSIT_ZONE_Z_OFFSET=500.0
 
 ; Table coordinates for front left corner (rel to world coords)
 DECL GLOBAL REAL TABLE_X=2000.0
-DECL GLOBAL REAL TABLE_Y=1006.0
-DECL GLOBAL REAL TABLE_Z=1078.0
+DECL GLOBAL REAL TABLE_Y=723.9
+DECL GLOBAL REAL TABLE_Z=914.4
 
 ; Towers from left to right
 ; Coordinate info for starting tower base relative to the table front left corner
@@ -40,11 +40,11 @@ DECL GLOBAL REAL TOWER_ONE_Z=0.0
 
 ; Coordinate info for goal tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_TWO_X=400.0
-DECL GLOBAL REAL TOWER_TWO_Y=-1006.0
+DECL GLOBAL REAL TOWER_TWO_Y=-723.9
 DECL GLOBAL REAL TOWER_TWO_Z=0.0
 
 ; Coordinate info for goal tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_THREE_X=400.0
-DECL GLOBAL REAL TOWER_THREE_Y=-1631.0
+DECL GLOBAL REAL TOWER_THREE_Y=-1219.2
 DECL GLOBAL REAL TOWER_THREE_Z=0.0
 ENDDAT
