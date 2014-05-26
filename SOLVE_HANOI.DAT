@@ -29,7 +29,7 @@ DECL GLOBAL REAL TRANSIT_ZONE_Z_OFFSET=650.0
 
 ; Table coordinates for front left corner (rel to world coords)
 DECL GLOBAL REAL TABLE_X=2000.0
-DECL GLOBAL REAL TABLE_Y=723.9
+DECL GLOBAL REAL TABLE_Y=739.775
 DECL GLOBAL REAL TABLE_Z=914.4
 
 ; Towers from left to right
