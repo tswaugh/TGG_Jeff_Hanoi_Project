@@ -18,7 +18,7 @@ DECL GLOBAL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -89.0,c 0.0}
 
 ; Following are placeholders 
 ; Info about the disk in
-DECL GLOBAL REAL DISK_THICKNESS=38.0999985
+DECL GLOBAL REAL DISK_THICKNESS=36.65
 DECL GLOBAL REAL DISK_PICKUP_OFFSET=-19.1000004
 
 ; Pick-up zone X offset
