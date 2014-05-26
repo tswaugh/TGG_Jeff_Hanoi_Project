@@ -14,7 +14,7 @@ DECL INT DISK_COUNTS[3]
 DECL BOOL FirstMove=FALSE
 
 ; Tool Definitions
-DECL GLOBAL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -90.0,c 0.0}
+DECL GLOBAL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -89.0,c 0.0}
 
 ; Following are placeholders 
 ; Info about the disk in
