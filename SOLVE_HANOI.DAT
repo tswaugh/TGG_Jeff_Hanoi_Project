@@ -14,7 +14,7 @@ DECL INT DISK_COUNTS[3]
 DECL BOOL FirstMove=FALSE
 
 ; Tool Definitions
-DECL GLOBAL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -89.0,c 0.0}
+DECL GLOBAL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -90,c 0.0}
 
 ; Following are placeholders 
 ; Info about the disk in
@@ -35,16 +35,16 @@ DECL GLOBAL REAL TABLE_Z=914.4
 ; Towers from left to right
 ; Coordinate info for starting tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_ONE_X=400.0
-DECL GLOBAL REAL TOWER_ONE_Y=-228.6
+DECL GLOBAL REAL TOWER_ONE_Y=-261.6
 DECL GLOBAL REAL TOWER_ONE_Z=0.0
 
 ; Coordinate info for goal tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_TWO_X=400.0
-DECL GLOBAL REAL TOWER_TWO_Y=-723.9
+DECL GLOBAL REAL TOWER_TWO_Y=-746.4
 DECL GLOBAL REAL TOWER_TWO_Z=0.0
 
 ; Coordinate info for goal tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_THREE_X=400.0
-DECL GLOBAL REAL TOWER_THREE_Y=-1219.2
+DECL GLOBAL REAL TOWER_THREE_Y=-1233.2
 DECL GLOBAL REAL TOWER_THREE_Z=0.0
 ENDDAT
