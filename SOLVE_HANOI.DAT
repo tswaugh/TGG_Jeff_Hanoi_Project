@@ -4,10 +4,10 @@
 &PARAM EDITMASK = *
 DEFDAT  SOLVE_HANOI
 DECL INT I=1
-DECL GLOBAL INT HANOI_DISK_COUNT=11
+DECL GLOBAL INT HANOI_DISK_COUNT=3
 ; Calculate REQUIRED_MOVES = 2^HANOI_DISK_COUNT - 1 (does KRL have exponents?)
-DECL INT REQUIRED_MOVES=2047
-DECL INT MOVE_ARRAY[2047,2]
+DECL INT REQUIRED_MOVES=7
+DECL INT MOVE_ARRAY[7,2]
 DECL INT DISK_COUNTS[3]
 
 ; Remember if we come from HOME
@@ -35,7 +35,7 @@ DECL GLOBAL REAL TABLE_Z=914.4
 ; Towers from left to right
 ; Coordinate info for starting tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_ONE_X=400.0
-DECL GLOBAL REAL TOWER_ONE_Y=-381.0
+DECL GLOBAL REAL TOWER_ONE_Y=-228.6
 DECL GLOBAL REAL TOWER_ONE_Z=0.0
 
 ; Coordinate info for goal tower base relative to the table front left corner
