@@ -19,7 +19,7 @@ DECL GLOBAL FRAME DiskTool={x 0.0,y 0.0,z 150.0,a 0.0,b -90,c 0.0}
 ; Following are placeholders 
 ; Info about the disk in
 DECL GLOBAL REAL DISK_THICKNESS=36.65
-DECL GLOBAL REAL DISK_PICKUP_OFFSET=-18
+DECL GLOBAL REAL DISK_PICKUP_OFFSET=-16
 
 ; Pick-up zone X offset
 DECL GLOBAL REAL PICK_UP_X_OFFSET=-550.0
@@ -35,7 +35,7 @@ DECL GLOBAL REAL TABLE_Z=914.4
 ; Towers from left to right
 ; Coordinate info for starting tower base relative to the table front left corner
 DECL GLOBAL REAL TOWER_ONE_X=400.0
-DECL GLOBAL REAL TOWER_ONE_Y=-242.6
+DECL GLOBAL REAL TOWER_ONE_Y=-244.1
 DECL GLOBAL REAL TOWER_ONE_Z=0.0
 
 ; Coordinate info for goal tower base relative to the table front left corner
